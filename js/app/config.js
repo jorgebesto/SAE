@@ -13,7 +13,7 @@
       // Un contrato SIGMA en alguno de estos estados no saca al predio
       sigma_ignorar_estados: ["TERMINADO"],
       // ESTADO COMERCIAL permitido
-      estado_comercial: ["NO ESTA EN PROCESO COMERCIAL", "PROXIMO EN VENTA", "PENDIENTE PUBLICACION"],
+      estado_comercial: ["NO ESTA EN PROCESO COMERCIAL", "PENDIENTE PUBLICACIÓN "PROXIMO EN VENTA""],
       // VIABLE SI/NO (COMERCIAL) permitido
       viable: ["NO", "0"],
     },
