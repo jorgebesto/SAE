@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Portafolio de folios · SAE</title>
+<meta name="description" content="Filtra la base de inmuebles, junta VUR, polígono y fotos de cada folio y genera el informe y la presentación de portafolio.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23002060'/%3E%3Cpath d='M8 9h16v3H8zm0 6h16v3H8zm0 6h10v3H8z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/estilos.css">
+</head>
+<body>
+<header class="cab">
+  <div class="cab-marca">
+    <img src="plantilla/logo-cierre.png" alt="SAE · Gobierno de Colombia" class="cab-logo">
+    <div>
+      <h1>Portafolio de folios</h1>
+      <p>Sociedad de Activos Especiales</p>
+    </div>
+  </div>
+  <div class="cab-estado">
+    <button type="button" class="pildora" id="btnBase"><span class="punto"></span><span id="txtBase">Base sin abrir</span></button>
+    <button type="button" class="pildora" id="btnGroq"><span class="punto"></span><span id="txtGroq">IA sin configurar</span></button>
+  </div>
+</header>
+<div class="tricolor" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<nav class="pasos" aria-label="Pasos">
+  <button type="button" data-vista="buscar" class="activa"><b>1</b> Buscar folios</button>
+  <button type="button" data-vista="portafolio"><b>2</b> Portafolio <span id="cuentaPort" class="cuenta-pill">0</span></button>
+  <button type="button" data-vista="documentos"><b>3</b> Documentos</button>
+</nav>
+
+<div id="aviso" class="aviso" hidden></div>
+
+<!-- ================= 1. BUSCAR ================= -->
+<main id="vistaBuscar" class="vista">
+  <section class="consulta">
+    <label for="solicitud" class="oculto">Solicitud</label>
+    <textarea id="solicitud" rows="1" placeholder="¿Qué pidieron? Ej.: lotes rurales en el Meta de más de 5 hectáreas, desocupados"></textarea>
+    <button type="button" id="preguntarIA" class="primario">Filtrar con IA</button>
+    <div class="menu">
+      <button type="button" class="secundario" data-menu="menuBusquedas">Búsquedas</button>
+      <div id="menuBusquedas" class="menu-lista" hidden></div>
+    </div>
+  </section>
+  <div id="respuestaIA" class="respuesta-ia" hidden></div>
+
+  <section id="barraFiltros" class="barra-filtros" aria-label="Filtros">
+    <span class="nota">Abra la base para ver los filtros.</span>
+  </section>
+
+  <section class="activos">
+    <div id="chipsActivos" class="chips"></div>
+    <div class="activos-acc">
+      <button type="button" id="guardarBusqueda" class="enlace">Guardar búsqueda</button>
+      <button type="button" id="limpiarFiltros" class="enlace peligro">Quitar filtros</button>
+    </div>
+  </section>
+
+  <!-- Contenido de los desplegables "Área" y "Más filtros" (se mueve a la barra al abrir la base) -->
+  <template id="tplArea">
+    <div class="pop-cuerpo">
+      <div class="campo">Área de terreno
+        <div class="rango"><input type="number" id="atMin" placeholder="desde" min="0" step="any"><input type="number" id="atMax" placeholder="hasta" min="0" step="any">
+          <select id="atUni" aria-label="Unidad"><option value="1">m²</option><option value="10000">ha</option></select></div>
+      </div>
+      <div class="campo">Área construida
+        <div class="rango"><input type="number" id="acMin" placeholder="desde" min="0" step="any"><input type="number" id="acMax" placeholder="hasta" min="0" step="any">
+          <select id="acUni" aria-label="Unidad"><option value="1">m²</option><option value="10000">ha</option></select></div>
+      </div>
+    </div>
+  </template>
+  <template id="tplMas">
+    <div class="pop-cuerpo mas">
+      <div class="mas-facetas"></div>
+      <div class="mas-col">
+        <h3 class="sub">Reglas base</h3>
+        <label class="chk"><input type="checkbox" data-regla="no_aplica" checked> Sin trámites, contratos ni comodatos <span class="cuenta" data-cuenta="no_aplica"></span></label>
+        <label class="chk"><input type="checkbox" data-regla="comercial" checked> Estado comercial disponible <span class="cuenta" data-cuenta="comercial"></span></label>
+        <label class="chk"><input type="checkbox" data-regla="viable" checked> Viable comercial en NO o 0 <span class="cuenta" data-cuenta="viable"></span></label>
+        <h3 class="sub">Condición sobre otra columna</h3>
+        <ul id="condiciones" class="condiciones"></ul>
+        <div class="nueva-cond">
+          <select id="condCol" aria-label="Columna"></select>
+          <select id="condOp" aria-label="Condición"></select>
+          <input id="condVal" placeholder="valor" aria-label="Valor">
+          <button type="button" id="condAgregar" class="secundario mini">Agregar</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <section class="resultados">
+    <div class="barra-res">
+      <div class="barra-res-izq">
+        <b id="tituloRes">—</b>
+        <div id="resumenDep" class="resumen-dep"></div>
+      </div>
+      <div class="barra-res-der">
+        <label class="orden">Ordenar por
+          <select id="orden">
+            <option value="">orden de la base</option>
+            <option value="departamento">departamento y municipio</option>
+            <option value="areaT-">mayor área de terreno</option>
+            <option value="areaT+">menor área de terreno</option>
+            <option value="areaC-">mayor área construida</option>
+            <option value="avaluo-">mayor avalúo catastral</option>
+            <option value="avaluo+">menor avalúo catastral</option>
+            <option value="fmi">folio de matrícula</option>
+          </select>
+        </label>
+        <button type="button" id="descargarRes" class="secundario" disabled>Descargar Excel</button>
+        <button type="button" id="agregarSel" class="primario" disabled>Agregar al portafolio</button>
+      </div>
+    </div>
+    <div id="tablaRes" class="tabla-res"><div class="vacio">Abra la base para empezar.</div></div>
+    <div id="paginas" class="paginas"></div>
+  </section>
+</main>
+
+<!-- ================= 2. PORTAFOLIO ================= -->
+<main id="vistaPortafolio" class="vista" hidden>
+  <div class="barra-port">
+    <div>
+      <h2>Folios del portafolio</h2>
+      <p id="resumenPend" class="nota"></p>
+    </div>
+    <div class="fila">
+      <button type="button" id="buscarTodos" class="secundario">Buscar polígonos de todos</button>
+      <button type="button" id="textosTodos" class="secundario">✦ Mejorar textos de todos con IA</button>
+      <button type="button" id="exportarAvance" class="secundario">Exportar avance</button>
+      <label class="boton secundario">Importar avance<input type="file" id="importarAvance" accept=".json" hidden></label>
+      <button type="button" id="vaciarPort" class="enlace peligro">Vaciar</button>
+    </div>
+  </div>
+  <div id="items"><div class="vacio">Todavía no hay folios. Agréguelos desde <b>1. Buscar folios</b>.</div></div>
+</main>
+
+<!-- ================= 3. DOCUMENTOS ================= -->
+<main id="vistaDocumentos" class="vista" hidden>
+  <div class="docs">
+    <aside class="docs-lado">
+      <section class="tarjeta">
+        <h2 class="tit">Solicitante</h2>
+        <label class="campo">Nombre del solicitante<input id="solicitante" placeholder="Ej.: Asociación Fraternidad Internacional de Jóvenes"></label>
+        <label class="campo">Tipo (botón de la portada)<input id="tipoSolicitante" placeholder="ESAL"></label>
+        <label class="campo">Número de solicitud o radicado<input id="radicado" placeholder="Opcional"></label>
+        <label class="campo">Logo del solicitante<input type="file" id="logoSolicitante" accept="image/*"></label>
+        <div id="logoPrevia" class="logo-previa"></div>
+        <label class="campo">Solicitud (objeto del informe)<textarea id="textoSolicitud" rows="3"></textarea></label>
+      </section>
+      <section class="tarjeta">
+        <h2 class="tit">Conclusiones generales</h2>
+        <textarea id="conclusiones" rows="7" placeholder="Se genera con la plantilla; puede editarla o mejorarla con IA."></textarea>
+        <div class="fila">
+          <button type="button" id="concPlantilla" class="secundario">Generar con plantilla</button>
+          <button type="button" id="concIA" class="secundario">✦ Mejorar con IA</button>
+        </div>
+        <p id="estadoConc" class="nota"></p>
+      </section>
+      <section class="tarjeta">
+        <h2 class="tit">Descargar</h2>
+        <div id="pendDocs" class="pend-docs"></div>
+        <div class="fila columna">
+          <button type="button" id="genPptx" class="primario">Presentación (PowerPoint)</button>
+          <button type="button" id="genDocx" class="secundario">Informe (Word)</button>
+          <button type="button" id="genPdf" class="secundario">Informe (PDF)</button>
+        </div>
+        <p id="estadoGen" class="nota"></p>
+      </section>
+    </aside>
+    <section class="docs-previa">
+      <div class="previa-tabs">
+        <button type="button" data-previa="informe" class="activa">Vista previa del informe</button>
+        <button type="button" data-previa="presentacion">Vista previa de la presentación</button>
+        <button type="button" id="actualizarPrevia" class="enlace">Actualizar</button>
+      </div>
+      <div id="previaInforme" class="previa-informe"><div class="vacio">Agregue folios al portafolio para ver el informe.</div></div>
+      <div id="previaPresentacion" class="previa-presentacion" hidden></div>
+    </section>
+  </div>
+</main>
+
+<footer class="pie">
+  La base se publica cifrada y solo se abre en el navegador con la contraseña. El VUR, los mapas y las fotos se guardan solo en este navegador.
+  A Groq se envían los nombres de las columnas y la solicitud; al pedir “Mejorar con IA”, también los datos del predio sin el nombre ni el documento del propietario.
+  Imagen satelital y mapas: Esri.
+</footer>
+
+<!-- ================= DIÁLOGOS ================= -->
+<dialog id="dlgBase" class="dialogo">
+  <form method="dialog" class="dlg-cab"><h2>Base de inmuebles</h2><button class="cerrar" aria-label="Cerrar">✕</button></form>
+  <div id="estadoBase" class="estado">Buscando la base del repositorio…</div>
+  <form id="formClave" class="fila" hidden autocomplete="off">
+    <input type="password" id="clave" placeholder="Contraseña de la base" autocomplete="current-password">
+    <button type="submit" class="primario">Abrir</button>
+    <label class="chk"><input type="checkbox" id="recordarClave"> Recordar la contraseña en este navegador</label>
+  </form>
+  <details id="detActualizar">
+    <summary>Actualizar la base / abrir un archivo</summary>
+    <p class="ayuda">Elija la exportación del sistema tal cual sale (CSV o Excel), <b>sin abrirla y guardarla en Excel</b>: Excel daña la cédula catastral (la vuelve 5.00E+28).</p>
+    <input type="file" id="archivoBase" accept=".csv,.txt,.xlsx,.enc">
+    <div id="estadoArchivo" class="nota"></div>
+    <div id="cifrarCaja" hidden>
+      <p class="ayuda">Para publicarla, cífrela con una contraseña y suba <b>base.enc</b> a la carpeta <code>base/</code> del repositorio (reemplazando el anterior).</p>
+      <div class="fila">
+        <input type="password" id="claveNueva" placeholder="Contraseña nueva" autocomplete="new-password">
+        <input type="password" id="claveNueva2" placeholder="Repítala" autocomplete="new-password">
+        <button type="button" id="cifrarBase" class="primario">Descargar base.enc</button>
+      </div>
+    </div>
+  </details>
+</dialog>
+
+<dialog id="dlgGroq" class="dialogo">
+  <form method="dialog" class="dlg-cab"><h2>Agente de IA (Groq)</h2><button class="cerrar" aria-label="Cerrar">✕</button></form>
+  <label class="campo">API key de Groq<input type="password" id="groqKey" placeholder="gsk_…" autocomplete="off" spellcheck="false"></label>
+  <label class="campo">Modelo<select id="groqModelo"></select></label>
+  <p class="nota">Recomendado: llama-3.3-70b-versatile. La key queda guardada solo en este navegador; no la suba al repositorio.</p>
+  <div class="fila"><button type="button" id="guardarGroq" class="primario">Guardar</button><span id="estadoGroq" class="nota"></span></div>
+</dialog>
+
+<dialog id="dlgGuardar" class="dialogo chico">
+  <form method="dialog" class="dlg-cab"><h2>Guardar búsqueda</h2><button class="cerrar" aria-label="Cerrar">✕</button></form>
+  <label class="campo">Nombre<input id="nombreBusqueda" placeholder="Ej.: Lotes rurales Meta – ESAL"></label>
+  <div class="fila"><button type="button" id="confirmarGuardar" class="primario">Guardar</button></div>
+</dialog>
+
+<template id="tplItem">
+  <article class="item">
+    <header class="item-cab">
+      <button type="button" class="item-abrir" data-acc="abrir" aria-expanded="false">
+        <span class="item-num"></span>
+        <span class="item-tit"><b class="item-fmi"></b><span class="item-lugar"></span></span>
+      </button>
+      <ul class="pendientes"></ul>
+      <div class="item-acc">
+        <button type="button" class="mini" data-acc="subir" title="Subir">↑</button>
+        <button type="button" class="mini" data-acc="bajar" title="Bajar">↓</button>
+        <button type="button" class="mini" data-acc="quitar">Quitar</button>
+      </div>
+    </header>
+    <div class="item-cuerpo" hidden>
+      <div class="item-rejilla">
+        <section class="bloque">
+          <h3 class="sub">Datos para la presentación</h3>
+          <div class="campos-ficha"></div>
+        </section>
+        <section class="bloque">
+          <h3 class="sub">Consulta del VUR (Datos Básicos)</h3>
+          <textarea class="vur" rows="5" placeholder="Pegue aquí la consulta Datos Básicos de este folio (Ctrl+A, Ctrl+C en el VUR)"></textarea>
+          <div class="fila"><button type="button" class="secundario mini" data-acc="leerVur">Leer VUR y buscar polígono</button></div>
+          <div class="vur-res"></div>
+          <h3 class="sub">Ubicación en el catastro</h3>
+          <div class="fila"><button type="button" class="secundario mini" data-acc="poligono">Buscar polígono</button></div>
+          <div class="cat-res"></div>
+        </section>
+        <section class="bloque">
+          <h3 class="sub">Imágenes</h3>
+          <p class="nota">Arrastre la imagen al recuadro, haga clic en él y pegue con Ctrl+V, o use “Elegir”.</p>
+          <div class="slots"></div>
+          <h3 class="sub">Fotos adicionales <span class="nota">(opcional, van de a dos por diapositiva)</span></h3>
+          <div class="extras"></div>
+          <label class="boton secundario mini">Agregar fotos<input type="file" accept="image/*" multiple data-acc="extras" hidden></label>
+        </section>
+      </div>
+      <section class="contexto">
+        <div class="contexto-cab">
+          <h3 class="sub">Contextualización del predio (va en el informe)</h3>
+          <div class="fila">
+            <button type="button" class="secundario mini" data-acc="textoPlantilla">Generar con plantilla</button>
+            <button type="button" class="secundario mini" data-acc="textoIA">✦ Mejorar con IA</button>
+            <span class="estado-texto nota"></span>
+          </div>
+        </div>
+        <label class="campo">Observaciones de la visita (las usa la IA y van en el informe)<textarea data-campo="observaciones" rows="2"></textarea></label>
+        <div class="secciones-texto"></div>
+      </section>
+    </div>
+  </article>
+</template>
+
+<script src="js/catastro/utils.js"></script>
+<script src="js/catastro/vur.js"></script>
+<script src="js/catastro/xlsx.js"></script>
+<script src="js/catastro/config.js"></script>
+<script src="js/catastro/arcgis.js"></script>
+<script src="js/catastro/gestores.js"></script>
+<script src="js/catastro/geoportales.js"></script>
+<script src="js/catastro/contraste.js"></script>
+<script src="js/catastro/confirmacion.js"></script>
+<script src="js/catastro/textos.js"></script>
+<script src="js/lib/pptxgen.bundle.js"></script>
+<script src="js/lib/docx.iife.js"></script>
+<script src="js/app/config.js"></script>
+<script src="js/app/base.js"></script>
+<script src="js/app/filtros.js"></script>
+<script src="js/app/agente.js"></script>
+<script src="js/app/imagenes.js"></script>
+<script src="js/app/mapa.js"></script>
+<script src="js/app/contexto.js"></script>
+<script src="js/app/presentacion.js"></script>
+<script src="js/app/modelo.js"></script>
+<script src="js/app/informe.js"></script>
+<script src="js/app/informe-html.js"></script>
+<script src="js/app/nucleo.js"></script>
+<script src="js/app/buscar.js"></script>
+<script src="js/app/folios.js"></script>
+<script src="js/app/documentos.js"></script>
+<script src="js/app/inicio.js"></script>
+</body>
+</html>
