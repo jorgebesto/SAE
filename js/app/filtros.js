@@ -10,7 +10,7 @@
   };
 
   F.estadoVacio = () => ({
-    reglas: { no_aplica: true, comercial: true, viable: true },
+    reglas: { no_aplica: true, comercial: true, viable: true, observaciones: true },
     cat: {},            // clave de columna del panel → [valores]
     rangos: { area_terreno: { min: null, max: null }, area_construida: { min: null, max: null } },
     condiciones: [],    // [{ columna: nombre normalizado, operador, valor }]
@@ -28,9 +28,9 @@
   F.reglasBase = function (base) {
     const R = IP.PORTAFOLIO.reglas;
     const na = conjunto(R.no_aplica), ignorar = conjunto(R.sigma_ignorar_estados);
-    const com = conjunto(R.estado_comercial), via = conjunto(R.viable);
+    const com = conjunto(R.estado_comercial), via = conjunto(R.viable), obs = conjunto(R.observaciones_vacias || [""]);
     const n = base.n;
-    const ok = { no_aplica: new Uint8Array(n).fill(1), comercial: new Uint8Array(n).fill(1), viable: new Uint8Array(n).fill(1) };
+    const ok = { no_aplica: new Uint8Array(n).fill(1), comercial: new Uint8Array(n).fill(1), viable: new Uint8Array(n).fill(1), observaciones: new Uint8Array(n).fill(1) };
 
     // No aplica (con la excepción de SIGMA en estado terminado)
     const iNum = base.c.contrato_sigma, iEst = base.c.estado_sigma;
@@ -45,7 +45,7 @@
         ok.no_aplica[r] = 0;
       }
     }
-    for (const [regla, col, permitidos] of [["comercial", "estado_comercial", com], ["viable", "viable", via]]) {
+    for (const [regla, col, permitidos] of [["comercial", "estado_comercial", com], ["viable", "viable", via], ["observaciones", "observaciones_juridicas", obs]]) {
       const i = base.c[col];
       if (i < 0) continue; // si la columna no existe, la regla no filtra
       const vale = porValor(base, i, (v) => permitidos.has(U.normalizar(v)));
@@ -53,7 +53,7 @@
       for (let r = 0; r < n; r++) ok[regla][r] = vale[ix[r]] ? 1 : 0;
     }
     const cuenta = (a) => a.reduce((s, x) => s + x, 0);
-    return { ok, conteo: { no_aplica: cuenta(ok.no_aplica), comercial: cuenta(ok.comercial), viable: cuenta(ok.viable) } };
+    return { ok, conteo: { no_aplica: cuenta(ok.no_aplica), comercial: cuenta(ok.comercial), viable: cuenta(ok.viable), observaciones: cuenta(ok.observaciones) } };
   };
 
   function numero(v) {
@@ -111,9 +111,10 @@
     const R = estado.reglas || {};
     const out = [];
     for (let r = 0; r < n; r++) {
-      if (R.no_aplica && !reglas.ok.no_aplica[r]) continue;
-      if (R.comercial && !reglas.ok.comercial[r]) continue;
-      if (R.viable && !reglas.ok.viable[r]) continue;
+      if (R.no_aplica !== false && !reglas.ok.no_aplica[r]) continue;
+      if (R.comercial !== false && !reglas.ok.comercial[r]) continue;
+      if (R.viable !== false && !reglas.ok.viable[r]) continue;
+      if (R.observaciones !== false && !reglas.ok.observaciones[r]) continue;
       let pasa = true;
       for (const [ix, vale] of pruebas) if (!vale[ix[r]]) { pasa = false; break; }
       if (!pasa) continue;
@@ -162,9 +163,10 @@
     const activas = facetas.map((f, j) => [j, f]).filter(([, f]) => f.vale);
     const out = [];
     for (let r = 0; r < n; r++) {
-      if (R.no_aplica && !reglas.ok.no_aplica[r]) continue;
-      if (R.comercial && !reglas.ok.comercial[r]) continue;
-      if (R.viable && !reglas.ok.viable[r]) continue;
+      if (R.no_aplica !== false && !reglas.ok.no_aplica[r]) continue;
+      if (R.comercial !== false && !reglas.ok.comercial[r]) continue;
+      if (R.viable !== false && !reglas.ok.viable[r]) continue;
+      if (R.observaciones !== false && !reglas.ok.observaciones[r]) continue;
       let pasa = true;
       for (const [ix, vale] of otras) if (!vale[ix[r]]) { pasa = false; break; }
       if (!pasa) continue;
@@ -191,9 +193,10 @@
     const P = IP.PORTAFOLIO;
     const partes = [];
     const R = estado.reglas || {};
-    if (R.no_aplica) partes.push("Trámites, contratos y comodatos en \"no aplica\"");
-    if (R.comercial) partes.push("Estado comercial: " + P.reglas.estado_comercial.join(", "));
-    if (R.viable) partes.push("Viable (comercial): " + P.reglas.viable.join(" o "));
+    if (R.no_aplica !== false) partes.push("Trámites, contratos y comodatos en \"no aplica\"");
+    if (R.comercial !== false) partes.push("Estado comercial: " + P.reglas.estado_comercial.join(", "));
+    if (R.viable !== false) partes.push("Viable (comercial): " + P.reglas.viable.join(" o "));
+    if (R.observaciones !== false) partes.push("Sin observaciones jurídicas");
     for (const [clave, titulo] of P.panel) {
       const v = (estado.cat || {})[clave];
       if (v && v.length) partes.push(`${titulo}: ${v.map((x) => x || "(vacío)").join(", ")}`);

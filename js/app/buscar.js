@@ -165,7 +165,7 @@
       const k = E.base.pos.get(c.columna);
       chips.push(`<span class="chip chip-cond">${esc(C().titulo(k !== undefined ? E.base.etiquetas[k] : c.columna))} ${esc(F.OPERADORES[c.operador] || c.operador)} ${["vacio", "no_vacio"].includes(c.operador) ? "" : "<b>" + esc(c.valor) + "</b>"}<button type="button" data-quitar="cond" data-i="${i}">✕</button></span>`);
     });
-    const nombresRegla = { no_aplica: "trámites/contratos en no aplica", comercial: "estado comercial", viable: "viable comercial" };
+    const nombresRegla = { no_aplica: "trámites/contratos en no aplica", comercial: "estado comercial", viable: "viable comercial", observaciones: "sin observaciones jurídicas" };
     for (const [k, t] of Object.entries(nombresRegla)) if (est.reglas[k] === false)
       chips.push(`<span class="chip chip-regla">Regla base desactivada: ${t}<button type="button" data-quitar="regla" data-k="${k}" title="Volver a activarla">↺</button></span>`);
     $("chipsActivos").innerHTML = chips.join("") || `<span class="nota">Sin filtros: se muestran todos los folios que cumplen las reglas base.</span>`;
@@ -209,7 +209,7 @@
   $("limpiarFiltros").addEventListener("click", () => {
     const reglas = E.estado.reglas;
     E.estado = F.estadoVacio();
-    E.estado.reglas = { ...reglas, no_aplica: true, comercial: true, viable: true };
+    E.estado.reglas = { ...reglas, no_aplica: true, comercial: true, viable: true, observaciones: true };
     ponerControles();
     $("respuestaIA").hidden = true;
     recalcular();

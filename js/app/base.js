@@ -43,6 +43,7 @@
     ocupacion: ["ESTADO DE OCUPACION"],
     estado_comercial: ["ESTADO COMERCIAL"],
     viable: ["VIABLE SI NO COMERCIAL", "VIABLE SI NO"],
+    observaciones_juridicas: ["OBSERVACIONES JURIDICAS"],
     contrato_sigma: ["NUMERO DE CONTRATO SIGMA"],
     estado_sigma: ["ESTADO DEL CONTRATO SIGMA"],
   };

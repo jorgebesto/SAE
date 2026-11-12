@@ -41,7 +41,7 @@
   function sistema(base) {
     const P = IP.PORTAFOLIO;
     return `Eres un asistente que traduce solicitudes de inmuebles de la Sociedad de Activos Especiales (SAE, Colombia) a filtros sobre una base de datos.
-La base ya aplica estas reglas base (no las repitas): trámites/contratos/comodatos en "no aplica"; ESTADO COMERCIAL en ${P.reglas.estado_comercial.join(", ")}; VIABLE SI/NO (COMERCIAL) en NO o 0.
+La base ya aplica estas reglas base (no las repitas): trámites/contratos/comodatos en "no aplica"; ESTADO COMERCIAL en ${P.reglas.estado_comercial.join(", ")}; VIABLE SI/NO (COMERCIAL) en NO o 0; OBSERVACIONES JURIDICAS vacía.
 
 Columnas de la base (nombre exacto → valores posibles):
 ${A.catalogo(base)}
