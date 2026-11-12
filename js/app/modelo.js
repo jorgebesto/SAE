@@ -6,6 +6,16 @@
 
   const lista = (xs) => (xs.length <= 1 ? xs.join("") : xs.slice(0, -1).join(", ") + " y " + xs[xs.length - 1]);
 
+  // "Departamento: TOLIMA, META" → "Departamento: Tolima, Meta"; valores en mayúsculas → frase
+  function criterioLegible(c) {
+    const i = c.indexOf(": ");
+    if (i < 0) return c;
+    const et = c.slice(0, i), val = c.slice(i + 2);
+    if (/[a-záéíóúñ]/.test(val.replace(/"[^"]*"|“[^”]*”/g, ""))) return c;
+    const nombre = /^(Departamento|Municipio)/i.test(et);
+    return `${et}: ${val.split(/,\s*/).map((x) => (nombre ? C().titulo(x) : IP.fmt.frase(x))).join(", ")}`;
+  }
+
   IP.modeloInforme = async function (port, opciones = {}) {
     const items = port.items || [];
     const bi = port.base_info || {};
@@ -33,18 +43,28 @@
     if (conCoord.length < items.length) mapaNota = `${items.length - conCoord.length} folio(s) sin coordenadas no aparecen en el mapa.`;
 
     // Resumen
+    const X = IP.fmt;
     const resumen = items.map((it, i) => [String(i + 1), it.fmi_texto || it.fmi, `${C().titulo(it.campos.municipio)} (${C().titulo(it.campos.departamento)})`,
-      C().titulo(it.campos.clasificacion), it.campos.area_terreno || "-", it.campos.ocupacion || "-",
+      X.sinDato(X.frase(it.campos.clasificacion)), X.sinDato(it.campos.area_terreno), X.sinDato(X.frase(it.campos.ocupacion)),
       it.confirmacion ? IP.TEXTO_CONFIRMACION[it.confirmacion.veredicto] : "Sin consultar"]);
+    const munsU = [...new Set(items.map((i) => `${C().titulo(i.campos.municipio)}, ${C().titulo(i.campos.departamento)}`))];
+    const portadaLinea = `${items.length} folio${items.length === 1 ? "" : "s"}  ·  ${munsU.length === 1 ? munsU[0] : munsU.length + " municipios"}`;
 
     // Predios
     const predios = [];
     for (const [i, it] of items.entries()) {
       const c = it.campos, v = it.vur, im = it.imagenes || {};
       const sec = (it.texto && it.texto.secciones) || C().plantilla(it, port);
-      const datos = IP.CAMPOS_FICHA.map(([k, e]) => [e.charAt(0) + e.slice(1).toLowerCase(), U.limpiar(c[k]) || "-"]);
-      datos.splice(1, 0, ["Departamento / municipio", `${C().titulo(c.departamento)} / ${C().titulo(c.municipio)}`], ["Barrio / vereda", U.limpiar(c.barrio) || "-"]);
-      datos.push(["Cédula catastral (base)", g.PF ? g.PF.deBase(it, "CEDULA CATASTRAL") || "-" : "-"]);
+      const ced = g.PF ? g.PF.deBase(it, "CEDULA CATASTRAL") : "";
+      const datos = [
+        ["Dirección", C().titulo(c.direccion)], ["Departamento / municipio", `${C().titulo(c.departamento)} / ${C().titulo(c.municipio)}`],
+        ["Barrio / vereda", X.vacio(c.barrio) ? "" : C().titulo(c.barrio)], ["Clase", X.frase(c.clase)],
+        ["Tipo de activo", X.frase(c.tipo_activo)], ["Clasificación activo", X.frase(c.clasificacion)],
+        ["Estado legal", X.frase(c.estado_legal)], ["Estado de ocupación", X.frase(c.ocupacion)],
+        ["Área terreno", c.area_terreno], ["Área construida", c.area_construida],
+        ["Activo social", X.frase(c.activo_social)], ["Cédula catastral (base)", /E\+/i.test(ced) ? "" : ced],
+        ["Avalúo catastral", c.avaluo_catastral], ["Avalúo comercial", c.avaluo_comercial],
+      ].map(([k, v]) => [k, X.sinDato(v)]);
       const vurFilas = v ? [
         ["Fecha de consulta", `${v.fecha_consulta || ""}${v.no_consulta ? " · consulta No. " + v.no_consulta : ""}`],
         ["Estado del folio", v.estado_folio || "-"], ["Fecha de apertura", v.fecha_apertura || "-"],
@@ -69,7 +89,7 @@
       predios.push({
         n: i + 1, fmi: it.fmi_texto || it.fmi,
         lugar: `${C().titulo(c.municipio)}, ${C().titulo(c.departamento)}`,
-        subtitulo: [C().titulo(c.clasificacion), /RURAL/i.test(c.clase) ? "Rural" : /URBAN/i.test(c.clase) ? "Urbano" : "", c.area_terreno].filter(Boolean).join(" · "),
+        subtitulo: [X.frase(c.clasificacion), X.frase(X.claseConcordada(c.clasificacion, c.clase))].filter(Boolean),
         sello: it.confirmacion ? IP.TEXTO_CONFIRMACION[it.confirmacion.veredicto] : "",
         hero: im.fachada ? im.fachada.url : it.mapa || "",
         secciones: C().SECCIONES.filter(([k]) => k !== "concepto").map(([k, t]) => [t, sec[k] || ""]),
@@ -81,8 +101,8 @@
 
     const conclusiones = (U.limpiar(port.conclusiones) || C().conclusionesPlantilla(port)).split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean);
     return {
-      titulo: "Informe técnico de folios para portafolio", fecha, solicitante: sol, tipo: U.limpiar(port.tipo), radicado: U.limpiar(port.radicado),
-      solicitud: U.limpiar(port.solicitud), objeto, metodo, criterios: port.filtros || [], cifras, mapaGeneral, mapaNota,
+      titulo: "Informe técnico de folios para portafolio", fecha, solicitante: sol, portadaLinea, tipo: U.limpiar(port.tipo), radicado: U.limpiar(port.radicado),
+      solicitud: U.limpiar(port.solicitud), objeto, metodo, criterios: (port.filtros || []).map(criterioLegible), cifras, mapaGeneral, mapaNota,
       resumenCab: ["No.", "Folio", "Municipio", "Clasificación", "Área de terreno", "Ocupación", "FMI vs. cédula"], resumen,
       predios, conclusiones, logo: port.logo || "",
     };

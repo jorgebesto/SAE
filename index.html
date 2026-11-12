@@ -51,6 +51,15 @@
     <span class="nota">Abra la base para ver los filtros.</span>
   </section>
 
+  <section class="reglas" aria-label="Reglas base">
+    <span class="reglas-tit">Reglas base</span>
+    <label class="interruptor" title="Las 12 columnas de trámites, contratos y comodatos en “no aplica”"><input type="checkbox" data-regla="no_aplica" checked><span class="pista"></span>Sin trámites ni contratos <span class="cuenta" data-cuenta="no_aplica"></span></label>
+    <label class="interruptor" title="ESTADO COMERCIAL en los valores de js/app/config.js"><input type="checkbox" data-regla="comercial" checked><span class="pista"></span>Comercial disponible <span class="cuenta" data-cuenta="comercial"></span></label>
+    <label class="interruptor" title="VIABLE SI/NO (COMERCIAL) en NO o 0"><input type="checkbox" data-regla="viable" checked><span class="pista"></span>Viable en NO o 0 <span class="cuenta" data-cuenta="viable"></span></label>
+    <label class="interruptor" title="OBSERVACIONES JURIDICAS vacía"><input type="checkbox" data-regla="observaciones" checked><span class="pista"></span>Sin observaciones jurídicas <span class="cuenta" data-cuenta="observaciones"></span></label>
+    <button type="button" id="todasReglas" class="enlace">Apagar todas</button>
+  </section>
+
   <section class="activos">
     <div id="chipsActivos" class="chips"></div>
     <div class="activos-acc">
@@ -76,11 +85,6 @@
     <div class="pop-cuerpo mas">
       <div class="mas-facetas"></div>
       <div class="mas-col">
-        <h3 class="sub">Reglas base</h3>
-        <label class="chk"><input type="checkbox" data-regla="no_aplica" checked> Sin trámites, contratos ni comodatos <span class="cuenta" data-cuenta="no_aplica"></span></label>
-        <label class="chk"><input type="checkbox" data-regla="comercial" checked> Estado comercial disponible <span class="cuenta" data-cuenta="comercial"></span></label>
-        <label class="chk"><input type="checkbox" data-regla="viable" checked> Viable comercial en NO o 0 <span class="cuenta" data-cuenta="viable"></span></label>
-        <label class="chk"><input type="checkbox" data-regla="observaciones" checked> Sin observaciones jurídicas <span class="cuenta" data-cuenta="observaciones"></span></label>
         <h3 class="sub">Condición sobre otra columna</h3>
         <ul id="condiciones" class="condiciones"></ul>
         <div class="nueva-cond">

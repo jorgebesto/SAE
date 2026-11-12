@@ -298,3 +298,18 @@ ul.fuentes li.f-ok { color: var(--ok); }
 #cifrarCaja input[type=password] { flex: 1 1 140px; }
 
 .pie { text-align: center; color: var(--suave); font-size: 12px; padding: 18px 28px 30px; max-width: 1000px; margin: 0 auto; }
+
+/* Reglas base: interruptores siempre visibles */
+.reglas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 8px; padding: 8px 12px; background: var(--papel); border: 1px solid var(--linea); border-radius: 8px; font-size: 13px; }
+.reglas-tit { font-weight: 600; color: var(--azul); margin-right: 2px; }
+.interruptor { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--tinta); user-select: none; }
+.interruptor input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.interruptor .pista { position: relative; width: 32px; height: 18px; border-radius: 9px; background: #c4ccd8; flex: none; transition: background .15s; }
+.interruptor .pista::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform .15s; }
+.interruptor input:checked + .pista { background: var(--azul); }
+.interruptor input:checked + .pista::after { transform: translateX(14px); }
+.interruptor input:focus-visible + .pista { outline: 2px solid var(--azul-3); outline-offset: 2px; }
+.interruptor.apagada { color: var(--suave); }
+.interruptor.apagada .cuenta { text-decoration: line-through; }
+.interruptor .cuenta { margin-left: 0; padding-left: 0; }
+.reglas .enlace { margin-left: auto; font-size: 12.5px; }

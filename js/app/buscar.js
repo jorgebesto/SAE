@@ -141,8 +141,7 @@
     area.classList.toggle("con-filtro", Boolean(at || ac));
     // Más filtros
     const masClaves = CLAVES.filter((k) => !PRINCIPALES.includes(k));
-    const n = masClaves.filter((k) => (E.estado.cat[k] || []).length).length + (E.estado.condiciones || []).length +
-      Object.values(E.estado.reglas).filter((x) => x === false).length;
+    const n = masClaves.filter((k) => (E.estado.cat[k] || []).length).length + (E.estado.condiciones || []).length;
     const mas = barra.querySelector('[data-pop="mas"]');
     mas.querySelector(".f-valor").textContent = n ? String(n) : "";
     mas.classList.toggle("con-filtro", n > 0);
@@ -166,8 +165,7 @@
       chips.push(`<span class="chip chip-cond">${esc(C().titulo(k !== undefined ? E.base.etiquetas[k] : c.columna))} ${esc(F.OPERADORES[c.operador] || c.operador)} ${["vacio", "no_vacio"].includes(c.operador) ? "" : "<b>" + esc(c.valor) + "</b>"}<button type="button" data-quitar="cond" data-i="${i}">✕</button></span>`);
     });
     const nombresRegla = { no_aplica: "trámites/contratos en no aplica", comercial: "estado comercial", viable: "viable comercial", observaciones: "sin observaciones jurídicas" };
-    for (const [k, t] of Object.entries(nombresRegla)) if (est.reglas[k] === false)
-      chips.push(`<span class="chip chip-regla">Regla base desactivada: ${t}<button type="button" data-quitar="regla" data-k="${k}" title="Volver a activarla">↺</button></span>`);
+
     $("chipsActivos").innerHTML = chips.join("") || `<span class="nota">Sin filtros: se muestran todos los folios que cumplen las reglas base.</span>`;
   }
   $("chipsActivos").addEventListener("click", (ev) => {
@@ -217,6 +215,18 @@
   ["texto", "atMin", "atMax", "acMin", "acMax"].forEach((id) => $(id).addEventListener("input", () => recalcularRebote()));
   ["atUni", "acUni"].forEach((id) => $(id).addEventListener("change", () => recalcular()));
   document.querySelectorAll("[data-regla]").forEach((c) => c.addEventListener("change", () => recalcular()));
+  function pintarReglas() {
+    const cajas = [...document.querySelectorAll("[data-regla]")];
+    const todas = cajas.every((c) => c.checked);
+    $("todasReglas").textContent = todas ? "Apagar todas" : "Prender todas";
+    cajas.forEach((c) => c.closest(".interruptor").classList.toggle("apagada", !c.checked));
+  }
+  $("todasReglas").addEventListener("click", () => {
+    const cajas = [...document.querySelectorAll("[data-regla]")];
+    const prender = !cajas.every((c) => c.checked);
+    cajas.forEach((c) => (c.checked = prender));
+    recalcular();
+  });
 
   /* ---------------- Recalcular ---------------- */
   let avaluoNum = null;
@@ -257,6 +267,7 @@
     for (const x of [...E.sel]) if (!enFilas.has(x)) E.sel.delete(x);
     document.querySelectorAll(".faceta").forEach(pintarFaceta);
     pintarEtiquetasBarra();
+    pintarReglas();
     pintarActivos();
     pintarCondiciones();
     pintarResumenDep();
