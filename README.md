@@ -2,7 +2,7 @@
 
 Página web independiente para preparar portafolios de inmuebles a partir de la base de activos de la SAE:
 
-1. **Buscar folios:** filtra la base (cifrada) con reglas base, filtros y un agente de IA (Groq) que convierte la solicitud escrita en filtros.
+1. **Buscar folios:** filtra la base (cifrada) con reglas base (sin trámites ni contratos, estado comercial disponible, viable en NO o 0 y sin observaciones jurídicas), filtros y un agente de IA (Groq) que convierte la solicitud escrita en filtros.
 2. **Portafolio:** por cada folio se pega la consulta del VUR, se busca el polígono en el IGAC y los gestores catastrales, se cargan las fotos (vista aérea, fachada, interiores) y se arma el texto de contextualización.
 3. **Documentos:** genera la presentación de portafolio (PowerPoint, plantilla SAE) y el informe técnico (Word y PDF), con vista previa.
 
