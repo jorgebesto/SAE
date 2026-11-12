@@ -12,10 +12,12 @@
       no_aplica: ["", "#N/D", "#N/A", "N/D", "N/A", "NA", "NO APLICA", "NO", "0", "-"],
       // Un contrato SIGMA en alguno de estos estados no saca al predio
       sigma_ignorar_estados: ["TERMINADO"],
-      // ESTADO COMERCIAL permitido
-     estado_comercial: ["NO ESTA EN PROCESO COMERCIAL", 'PENDIENTE PUBLICACIÓN "PROXIMO EN VENTA"'],,
+      // ESTADO COMERCIAL permitido (no importan mayúsculas, tildes ni comillas)
+      estado_comercial: ["NO ESTA EN PROCESO COMERCIAL", "PENDIENTE PUBLICACION", "PROXIMO EN VENTA", 'PENDIENTE PUBLICACIÓN "PROXIMO EN VENTA"'],
       // VIABLE SI/NO (COMERCIAL) permitido
       viable: ["NO", "0"],
+      // OBSERVACIONES JURIDICAS: el predio pasa solo si la columna no tiene nada (estos valores cuentan como vacía)
+      observaciones_vacias: ["", "0", "#N/D", "#N/A", "N/D", "N/A", "NA", "-", "NINGUNA", "SIN OBSERVACIONES"],
     },
 
     // Filtros del panel (clave de columna en js/portafolio/base.js → título)
