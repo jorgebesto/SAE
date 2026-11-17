@@ -65,9 +65,22 @@
   }
 
   /* ---------------- Vista previa ---------------- */
+  const modo = () => (E.port.modo_informe === "separados" && E.port.items.length > 1 ? "separados" : "juntos");
+  function pintarModo() {
+    document.querySelectorAll('[name="modoInforme"]').forEach((r) => { r.checked = r.value === (E.port.modo_informe || "juntos"); });
+    $("modoInforme").hidden = E.port.items.length <= 1;
+    const sel = $("previaFolio");
+    sel.hidden = modo() !== "separados" || previa !== "informe";
+    const actual = sel.value;
+    sel.innerHTML = E.port.items.map((it) => `<option value="${esc(it.id)}">Folio ${esc(it.fmi_texto || it.fmi)}</option>`).join("");
+    if (E.port.items.some((it) => it.id === actual)) sel.value = actual;
+  }
+  $("modoInforme").addEventListener("change", (ev) => { E.port.modo_informe = ev.target.value; PF.guardar(); sucio = true; pintarModo(); pintarPrevia(); });
+  $("previaFolio").addEventListener("change", () => { sucio = true; pintarPrevia(); });
   async function modelo() {
     if (!sucio && cacheModelo) return cacheModelo;
-    cacheModelo = await IP.modeloInforme(E.port);
+    const sel = modo() === "separados" ? E.port.items.find((it) => it.id === $("previaFolio").value) || E.port.items[0] : null;
+    cacheModelo = await IP.modeloInforme(E.port, sel ? { items: [sel] } : {});
     cacheSlides = null;
     sucio = false;
     return cacheModelo;
@@ -80,6 +93,7 @@
   }
   async function pintarPrevia() {
     const items = E.port.items;
+    pintarModo();
     $("previaInforme").hidden = previa !== "informe";
     $("previaPresentacion").hidden = previa !== "presentacion";
     if (!items.length) {
@@ -111,6 +125,7 @@
   document.querySelectorAll("[data-previa]").forEach((b) => b.addEventListener("click", () => {
     previa = b.dataset.previa;
     document.querySelectorAll("[data-previa]").forEach((x) => x.classList.toggle("activa", x === b));
+    pintarModo();
     pintarPrevia();
   }));
   $("actualizarPrevia").addEventListener("click", () => { sucio = true; pintarPrevia(); });
@@ -128,11 +143,22 @@
   $("genPptx").addEventListener("click", () => generar($("genPptx"), "Generando la presentación…", async () => {
     PF.descargar(await IP.generarPresentacion(E.port, await slides()), `Portafolio_${nombreBase()}.pptx`);
   }));
+  const fecha = () => U.ahora().slice(0, 10);
   $("genDocx").addEventListener("click", () => generar($("genDocx"), "Generando el informe en Word…", async () => {
-    PF.descargar(await IP.generarInforme(E.port, await modelo()), `Informe_folios_${nombreBase()}.docx`);
+    const lista = await IP.modelosInforme(E.port, modo());
+    for (const [k, x] of lista.entries()) {
+      if (lista.length > 1) $("estadoGen").textContent = `Generando el informe ${k + 1} de ${lista.length} (folio ${x.nombre})…`;
+      PF.descargar(await IP.generarInforme(E.port, x.modelo), x.nombre ? `Informe_folio_${x.nombre}_${fecha()}.docx` : `Informe_folios_${nombreBase()}.docx`);
+      if (lista.length > 1) await PF.pausa(700);
+    }
   }));
   $("genPdf").addEventListener("click", () => generar($("genPdf"), "Abriendo la impresión: elija “Guardar como PDF”…", async () => {
-    await IP.imprimirInforme(IP.informeHtml(await modelo(), await IP.imagenesInforme()));
+    const lista = await IP.modelosInforme(E.port, modo());
+    const imgs = await IP.imagenesInforme();
+    for (const [k, x] of lista.entries()) {
+      if (lista.length > 1) $("estadoGen").textContent = `Informe ${k + 1} de ${lista.length} (folio ${x.nombre}): elija “Guardar como PDF”…`;
+      await IP.imprimirInforme(IP.informeHtml(x.modelo, imgs));
+    }
   }));
 
   PF.alCambiarPort.push(() => { sucio = true; if (PF.vistaActual === "documentos") pintarPendientes(); });

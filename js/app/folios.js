@@ -10,7 +10,8 @@
   PF.pendientes = function (it) {
     const im = it.imagenes || {};
     return [
-      { k: "vur", t: "VUR", ok: Boolean(it.vur) },
+      { k: "vur", t: it.registral ? "VUR leído" : "VUR", ok: Boolean(it.vur) },
+      { k: "visita", t: it.visita ? "Visita" : "Sin visita", ok: true, info: !it.visita },
       { k: "mapa", t: "Vista aérea", ok: Boolean(it.mapa) },
       { k: "fachada", t: "Fachada", ok: Boolean(im.fachada) },
       { k: "interiores", t: `Interiores ${[im.interior1, im.interior2].filter(Boolean).length}/2`, ok: Boolean(im.interior1 && im.interior2) },
@@ -69,8 +70,8 @@
     nodo.querySelector(".campos-ficha").innerHTML = filas.map(([k, et]) =>
       `<label class="campo-linea"><span>${esc(et)}</span><input data-campo-ficha="${k}" value="${esc(it.campos[k] || "")}"></label>`).join("");
     nodo.querySelector('[data-campo="observaciones"]').value = it.observaciones || "";
-    nodo.querySelector(".vur").value = it.vur_texto || "";
     pintarVur(nodo, it);
+    pintarVisita(nodo, it);
     pintarCatastro(nodo, it);
     pintarSlots(nodo, it);
     pintarExtras(nodo, it);
@@ -84,21 +85,83 @@
     pintarResumen();
   }
 
-  function pintarVur(nodo, it) {
-    const box = nodo.querySelector(".vur-res");
-    const v = it.vur;
-    if (!v) { box.innerHTML = `<p class="nota">Sin consulta del VUR.</p>`; return; }
-    const al = IP.vur.alertas(v);
-    box.innerHTML = `<dl class="mini-dl">
-      <div><dt>Consulta</dt><dd>${esc(v.fecha_consulta || "")} ${esc(v.hora_consulta || "")}</dd></div>
-      <div><dt>Referencia catastral</dt><dd class="mono">${esc(v.referencia_catastral || "-")}</dd></div>
-      <div><dt>Ref. anterior</dt><dd class="mono">${esc(v.referencia_catastral_anterior || "-")}</dd></div>
-      <div><dt>NUPRE</dt><dd class="mono">${esc(v.nupre || "-")}</dd></div>
-      <div><dt>Estado folio</dt><dd>${esc(v.estado_folio || "-")}</dd></div>
-      <div><dt>Propietarios</dt><dd>${esc(v.propietarios_texto || "-")}</dd></div>
-      <div><dt>Cabida</dt><dd>${esc(v.area_cabida_texto || "-")}</dd></div></dl>` +
-      (al.length ? `<ul class="avisos">${al.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>` : "");
+  /* ---------------- VUR ---------------- */
+  const REG_CAMPOS = [
+    ["consulta.numero", "No. de consulta"], ["consulta.fecha", "Fecha de consulta"], ["consulta.hora", "Hora"],
+    ["estado_folio", "Estado del folio"], ["fecha_apertura", "Apertura del folio"], ["tipo_instrumento_apertura", "Instrumento de apertura"],
+    ["tipo_predio", "Tipo de predio"], ["referencia_catastral", "Referencia catastral"], ["referencia_catastral_anterior", "Referencia anterior"],
+    ["direccion", "Dirección registrada"], ["_titular", "Titular inscrito"], ["cabida_linderos", "Cabida y linderos"],
+    ["area_terreno_m2", "Área de terreno (m²)"], ["area_privada_m2", "Área privada (m²)"], ["area_construida_m2", "Área construida (m²)"],
+    ["linderos_tecnicamente_definidos", "Linderos técnicamente definidos"], ["matriculas_matriz", "Matrícula(s) matriz"], ["matriculas_derivadas", "Matrícula(s) derivada(s)"],
+  ];
+  const leerRuta = (o, r) => r.split(".").reduce((x, k) => (x == null ? x : x[k]), o);
+  function ponerRuta(o, r, v) { const ks = r.split("."); let x = o; ks.slice(0, -1).forEach((k) => { x[k] = x[k] || {}; x = x[k]; }); x[ks[ks.length - 1]] = v; }
+  const titular = (reg) => U.limpiar(reg._titular) || (reg.propietarios || []).map((p) => [p.nombre, p.documento ? `${p.tipo_documento || "doc."} ${p.documento}` : ""].filter(Boolean).join(", ")).join("; ");
+
+  function pintarDocs(nodo, it) {
+    const docs = it.vur_docs || [];
+    nodo.querySelector(".docs-lista").innerHTML = docs.map((d, i) => `<li><span>📄 ${esc(d.nombre)} <small>${U.formatoNumero(d.texto.length, 0)} caracteres</small></span><button type="button" class="mini" data-quitar-doc="${i}" aria-label="Quitar">✕</button></li>`).join("");
   }
+  function pintarVur(nodo, it) {
+    pintarDocs(nodo, it);
+    const box = nodo.querySelector(".vur-res");
+    if (it._leyendoVur) { box.innerHTML = `<p class="nota cargando">El agente está leyendo el VUR…</p>`; return; }
+    const reg = it.registral, v = it.vur;
+    if (!reg && !v) { box.innerHTML = it._errorVur ? `<p class="mal-t">${esc(it._errorVur)}</p>` : `<p class="nota">Sin VUR leído.</p>`; return; }
+    if (!reg) {
+      box.innerHTML = `<p class="nota">Leído sin el agente (solo datos básicos).</p><dl class="mini-dl"><div><dt>Estado folio</dt><dd>${esc(v.estado_folio || "-")}</dd></div><div><dt>Referencia catastral</dt><dd>${esc(v.referencia_catastral || "-")}</dd></div><div><dt>Propietarios</dt><dd>${esc(v.propietarios_texto || "-")}</dd></div></dl>`;
+      return;
+    }
+    const ult = reg.ultima_anotacion;
+    box.innerHTML = `${it._errorVur ? `<p class="mal-t">${esc(it._errorVur)}</p>` : ""}
+      <dl class="mini-dl">
+        <div><dt>Consulta</dt><dd>${esc([reg.consulta.numero && "No. " + reg.consulta.numero, reg.consulta.fecha, reg.consulta.hora].filter(Boolean).join(" · ") || "-")}</dd></div>
+        <div><dt>Estado del folio</dt><dd>${esc(reg.estado_folio || "-")}</dd></div>
+        <div><dt>Titular</dt><dd>${esc(titular(reg) || "-")}</dd></div>
+        <div><dt>Área de terreno</dt><dd>${reg.area_terreno_m2 ? esc(U.formatoArea(Number(reg.area_terreno_m2))) : "-"}</dd></div>
+        <div><dt>Salvedades</dt><dd>${reg.salvedades.length}</dd></div>
+        <div><dt>Anotaciones</dt><dd>${reg.anotaciones.length ? `${reg.anotaciones.length} · última: n.º ${esc(ult.numero)} del ${esc(ult.fecha)}` : "No vienen en el documento"}</dd></div>
+        <div><dt>Alertas</dt><dd>${reg.alertas.length ? esc(reg.alertas.join("; ")) : "No registra"}</dd></div>
+      </dl>
+      ${reg._recortado ? `<p class="nota">El documento era muy largo: el agente leyó el comienzo y las anotaciones más recientes.</p>` : ""}
+      <details class="revisar"><summary>Revisar y corregir lo que leyó el agente</summary>
+        <div class="campos-reg">${REG_CAMPOS.map(([k, t]) => `<label class="campo-linea"><span>${esc(t)}</span><input data-reg="${k}" value="${esc(k === "_titular" ? titular(reg) : leerRuta(reg, k) ?? "")}"></label>`).join("")}</div>
+        ${reg.anotaciones.length ? `<p class="mini-tit">Anotaciones (últimas 5)</p><table class="mini-tabla"><tr><th>N.º</th><th>Fecha</th><th>Especificación</th></tr>${reg.anotaciones.slice(-5).reverse().map((a) => `<tr><td>${esc(a.numero)}</td><td>${esc(a.fecha)}</td><td>${esc(a.especificacion)}</td></tr>`).join("")}</table>` : ""}
+        ${reg.salvedades.length ? `<p class="mini-tit">Salvedades</p><table class="mini-tabla"><tr><th>Anot.</th><th>Fecha</th><th>Descripción</th></tr>${reg.salvedades.map((x) => `<tr><td>${esc(x.anotacion)}</td><td>${esc(x.fecha)}</td><td>${esc(x.descripcion)}</td></tr>`).join("")}</table>` : ""}
+      </details>`;
+  }
+
+  /* ---------------- Informe de visita ---------------- */
+  const VIS_CAMPOS = [
+    ["fecha", "Fecha"], ["hora", "Hora"], ["realizado_por", "Realizada por"], ["area_sae", "Área de la SAE"], ["objeto", "Objeto"],
+    ["mecanismo_administracion", "Mecanismo de administración"], ["tipo_activo", "Tipo de activo"], ["estado_legal", "Estado legal"], ["tipo_bien", "Tipo de bien"],
+    ["direccion", "Dirección"], ["barrio_vereda", "Barrio o vereda"], ["estrato", "Estrato"], ["ingreso_predio", "Ingreso al predio"], ["estado_ocupacion", "Estado"],
+    ["propiedad_horizontal", "Propiedad horizontal"], ["clase_inmueble", "Clase de inmueble"], ["uso_actual", "Uso actual"],
+    ["observaciones_inmueble", "Observaciones del inmueble"], ["edificaciones_importantes", "Edificaciones importantes"], ["ruta_llegada", "Ruta de llegada"],
+    ["descripcion_comercial", "Descripción comercial"], ["observaciones_visita", "Observaciones de la visita"], ["visito.nombre", "Visitó"], ["visito.cargo", "Cargo de quien visitó"],
+    ["verifico.nombre", "Verificó"], ["verifico.cargo", "Cargo de quien verificó"],
+  ];
+  function pintarVisita(nodo, it) {
+    const box = nodo.querySelector(".visita-res");
+    const vi = it.visita;
+    if (it._leyendoVisita) { box.innerHTML = `<p class="nota cargando">Leyendo el informe de visita…</p>`; return; }
+    if (!vi) { box.innerHTML = it._errorVisita ? `<p class="mal-t">${esc(it._errorVisita)}</p>` : `<p class="nota">Sin informe de visita.</p>`; return; }
+    const d = vi.datos;
+    const fotos = (vi.fotos || []).map((f, i) => `<figure class="foto-visita${f.incluir === false ? " fuera" : ""}"><img src="${f.url}" alt="Foto ${i + 1} de la visita">
+      <figcaption><label class="chk"><input type="checkbox" data-visita-foto="${i}"${f.incluir === false ? "" : " checked"}> En el anexo</label>
+      <span class="usar">Usar como: <button type="button" class="mini" data-usar-foto="${i}" data-slot="fachada">Fachada</button><button type="button" class="mini" data-usar-foto="${i}" data-slot="interior1">Int. 1</button><button type="button" class="mini" data-usar-foto="${i}" data-slot="interior2">Int. 2</button></span></figcaption></figure>`).join("");
+    box.innerHTML = `<ul class="docs-lista"><li><span>📋 ${esc(vi.archivo)} <small>${(vi.fotos || []).length} foto(s)</small></span><button type="button" class="mini" data-acc="quitarVisita" aria-label="Quitar informe de visita">✕</button></li></ul>
+      ${it._errorVisita ? `<p class="mal-t">${esc(it._errorVisita)}</p>` : ""}
+      ${d ? `<dl class="mini-dl"><div><dt>Visita</dt><dd>${esc([d.fecha, d.hora, d.objeto].filter(Boolean).join(" · "))}</dd></div>
+        <div><dt>Estado</dt><dd>${esc([d.estado_ocupacion, d.clase_inmueble, d.uso_actual].filter(Boolean).join(" · ") || "-")}</dd></div>
+        <div><dt>Observaciones</dt><dd>${esc(d.observaciones_inmueble || "-")}</dd></div></dl>
+        <details class="revisar"><summary>Revisar y corregir lo que leyó el agente</summary>
+          <div class="campos-reg">${VIS_CAMPOS.map(([k, t]) => `<label class="campo-linea"><span>${esc(t)}</span><input data-vis="${k}" value="${esc(leerRuta(d, k) ?? "")}"></label>`).join("")}</div>
+        </details>`
+      : `<p class="nota">Se cargaron el texto y las fotos. ${IP.agente.apiKey() ? `<button type="button" class="mini" data-acc="leerVisita">Leer con el agente</button>` : "Configure la IA para leer los datos."}</p>`}
+      ${fotos ? `<p class="mini-tit">Fotos del informe (${vi.fotos.length})</p><div class="fotos-visita">${fotos}</div>` : `<p class="nota">El PDF no trae fotos.</p>`}`;
+  }
+
   function pintarCatastro(nodo, it) {
     const box = nodo.querySelector(".cat-res");
     const c = it.catastro;
@@ -193,20 +256,66 @@
   }
 
   /* ---------------- VUR y catastro ---------------- */
+  async function leerArchivoPdf(f) { return new Uint8Array(await f.arrayBuffer()); }
+
   async function leerVur(art, it) {
-    const texto = art.querySelector(".vur").value;
-    const box = art.querySelector(".vur-res");
-    const consultas = IP.vur.leerTexto(texto);
-    if (!consultas.length) { box.innerHTML = `<p class="mal-t">No reconocí una consulta “Datos Básicos” del VUR en el texto.</p>`; return false; }
-    const v = consultas.find((c) => c.matricula_normalizada === it.fmi) || consultas[0];
-    if (v.matricula_normalizada !== it.fmi) {
-      box.innerHTML = `<p class="mal-t">La consulta pegada es del folio ${esc(v.matricula)}, no del ${esc(it.fmi_texto || it.fmi)}. No se guardó.</p>`;
-      return false;
+    const pegado = art.querySelector(".vur").value.trim();
+    it.vur_docs = it.vur_docs || [];
+    if (pegado && !it.vur_docs.some((d) => d.texto === pegado)) { it.vur_docs.push({ nombre: "Texto pegado", tipo: "texto", texto: pegado }); art.querySelector(".vur").value = ""; }
+    if (!it.vur_docs.length) { it._errorVur = "Pegue el texto del VUR o suba el PDF."; refrescar(it); return false; }
+    const todo = it.vur_docs.map((d) => d.texto).join("\n\n");
+    it.vur_texto = todo;
+    it._errorVur = "";
+    // Lectura clásica (sin IA) de los datos básicos copiados de la página; el texto de los PDF lo lee el agente
+    const pegados = it.vur_docs.filter((d) => d.tipo === "texto" || (!d.tipo && d.nombre === "Texto pegado")).map((d) => d.texto).join("\n\n");
+    const matDe = (c) => U.normalizarMatricula((String(c.matricula || c.matricula_normalizada || "").match(/\d{1,4}\s*-\s*\d+/) || [""])[0].replace(/\s+/g, ""));
+    const consultas = pegados ? IP.vur.leerTexto(pegados) : [];
+    const basico = consultas.find((c) => matDe(c) === it.fmi) || null;
+    const otro = consultas.find((c) => matDe(c) && matDe(c) !== it.fmi);
+    if (!basico && otro) { it._errorVur = `El documento es del folio ${otro.matricula}, no del ${it.fmi_texto || it.fmi}. Quítelo y suba el correcto.`; refrescar(it); return false; }
+    if (!IP.agente.apiKey()) {
+      if (!basico) { it._errorVur = "Sin la IA solo se puede leer el texto de Datos Básicos copiado de la página. Configure la IA para leer PDF y certificados."; refrescar(it); return false; }
+      it.vur = basico; it.registral = null; PF.guardar(); return true;
     }
-    it.vur = v; it.vur_texto = texto;
-    if (/RURAL/i.test(it.campos.clase) && U.limpiar(v.vereda) && (!U.limpiar(it.campos.barrio) || it.campos.barrio === "-")) it.campos.barrio = v.vereda;
-    PF.guardar();
-    return true;
+    it._leyendoVur = true; refrescar(it);
+    try {
+      const reg = await IP.lector.leerVUR(it.vur_docs, it.fmi_texto || it.fmi);
+      const mat = U.normalizarMatricula(reg.matricula || "");
+      if (mat && mat !== it.fmi) throw new Error(`El VUR es del folio ${reg.matricula}, no del ${it.fmi_texto || it.fmi}.`);
+      it.registral = reg;
+      it.vur = IP.lector.aVurClasico(reg, basico || {});
+      if (!it.vur.matricula_normalizada) it.vur.matricula_normalizada = it.fmi;
+      if (/RURAL/i.test(it.campos.clase) && U.limpiar(it.vur.vereda) && (!U.limpiar(it.campos.barrio) || it.campos.barrio === "-")) it.campos.barrio = it.vur.vereda;
+      return true;
+    } catch (e) {
+      it._errorVur = e.message;
+      if (basico) it.vur = basico;
+      return Boolean(basico);
+    } finally { it._leyendoVur = false; PF.guardar(); refrescar(it); }
+  }
+
+  async function subirVisita(it, f) {
+    it._leyendoVisita = true; it._errorVisita = ""; refrescar(it);
+    try {
+      const bytes = await leerArchivoPdf(f);
+      const { texto } = await IP.pdf.texto(bytes);
+      if (!/VISITA|INSPECCI/i.test(texto)) throw new Error("El PDF no parece un informe de visita FO-DA-003.");
+      const fotos = (await IP.pdf.imagenes(bytes)).map((x) => ({ url: x.url, w: x.w, h: x.h, incluir: true }));
+      it.visita = { archivo: f.name, texto, fotos, datos: null };
+      if (IP.agente.apiKey()) await leerVisitaIA(it, false);
+    } catch (e) { it._errorVisita = "No se pudo leer el informe de visita: " + e.message; }
+    finally { it._leyendoVisita = false; PF.guardar(); refrescar(it); }
+  }
+  async function leerVisitaIA(it, refrescarAlFinal = true) {
+    it._leyendoVisita = true; if (refrescarAlFinal) refrescar(it);
+    try {
+      const d = await IP.lector.leerVisita(it.visita.texto, it.fmi_texto || it.fmi);
+      const fol = U.normalizarMatricula(d.folio || "");
+      if (fol && fol !== it.fmi) it._errorVisita = `Ojo: el informe de visita dice folio ${d.folio}, y este es el ${it.fmi_texto || it.fmi}.`;
+      it.visita.datos = d;
+      if (U.limpiar(d.estado_ocupacion) && !U.limpiar(it.observaciones)) it.observaciones = "";
+    } catch (e) { it._errorVisita = e.message; }
+    finally { if (refrescarAlFinal) { it._leyendoVisita = false; PF.guardar(); refrescar(it); } }
   }
 
   async function buscarPoligono(it) {
@@ -248,6 +357,14 @@
     const k = ev.target.dataset.campoFicha;
     if (k) { it.campos[k] = ev.target.value; if (k === "enlace") it.enlace_auto = false; PF.guardar(); return; }
     if (ev.target.dataset.campo === "observaciones") { it.observaciones = ev.target.value; PF.guardar(); return; }
+    const kr = ev.target.dataset.reg;
+    if (kr && it.registral) {
+      const v = ev.target.value;
+      ponerRuta(it.registral, kr, /_m2$/.test(kr) ? (v === "" ? null : U.numeroColombiano(v) ?? v) : v);
+      PF.guardar(); return;
+    }
+    const kv = ev.target.dataset.vis;
+    if (kv && it.visita && it.visita.datos) { ponerRuta(it.visita.datos, kv, ev.target.value); PF.guardar(); return; }
     const t = ev.target.dataset.texto;
     if (t) {
       if (!it.texto) it.texto = { secciones: { ...C.plantilla(it, E.port) }, origen: "editado", fecha: U.ahora() };
@@ -264,6 +381,21 @@
     if (!it) return;
     const k = ev.target.dataset.slotArchivo;
     if (k && ev.target.files[0]) { await ponerImagen(it, k, ev.target.files[0]); return; }
+    if (ev.target.dataset.acc === "vurPdf") {
+      const files = [...ev.target.files];
+      ev.target.value = "";
+      it.vur_docs = it.vur_docs || [];
+      for (const f of files) {
+        try { const { texto } = await IP.pdf.texto(await leerArchivoPdf(f)); it.vur_docs.push({ nombre: f.name, tipo: "pdf", texto }); }
+        catch (e) { it._errorVur = `No se pudo leer ${f.name}: ${e.message}`; }
+      }
+      PF.guardar(); pintarDocs(art, it);
+      if (IP.agente.apiKey() || it.vur_docs.length) { if (await leerVur(art, it)) await buscarPoligono(it); }
+      return;
+    }
+    if (ev.target.dataset.acc === "visitaPdf" && ev.target.files[0]) { const f = ev.target.files[0]; ev.target.value = ""; await subirVisita(it, f); return; }
+    const vf = ev.target.dataset.visitaFoto;
+    if (vf != null && it.visita) { it.visita.fotos[Number(vf)].incluir = ev.target.checked; ev.target.closest("figure").classList.toggle("fuera", !ev.target.checked); PF.guardar(); return; }
     if (ev.target.dataset.acc === "extras") {
       for (const f of ev.target.files) {
         try { const r = await IP.imagenes.reducir(f, 1600); it.imagenes.extra.push({ url: r.url, w: r.w, h: r.h }); }
@@ -275,7 +407,7 @@
   $("items").addEventListener("click", async (ev) => {
     const [art, it] = itemDe(ev.target);
     if (!it) return;
-    const b = ev.target.closest("[data-acc], [data-slot-quitar], [data-extra]");
+    const b = ev.target.closest("[data-acc], [data-slot-quitar], [data-extra], [data-quitar-doc], [data-usar-foto]");
     const slot = ev.target.closest(".slot");
     if (slot && !b && !ev.target.closest("label")) slot.focus();
     if (!b) return;
@@ -287,11 +419,19 @@
     if (acc === "bajar" && idx < E.port.items.length - 1) { E.port.items.splice(idx + 1, 0, E.port.items.splice(idx, 1)[0]); PF.guardar(); pintarPortafolio(); return; }
     if (acc === "leerVur") { b.disabled = true; if (await leerVur(art, it)) await buscarPoligono(it); else b.disabled = false; return; }
     if (acc === "poligono") { b.disabled = true; await buscarPoligono(it); return; }
+    if (acc === "quitarVisita") { if (confirm("¿Quitar el informe de visita de este folio?")) { it.visita = null; it._errorVisita = ""; PF.guardar(); refrescar(it); } return; }
+    if (acc === "leerVisita") { if (PF.asegurarGroq()) await leerVisitaIA(it); return; }
     if (acc === "textoPlantilla") {
       if (it.texto && !confirm("Se reemplaza el texto actual por el de la plantilla (automático). ¿Continuar?")) return;
       it.texto = null; PF.guardar(); refrescar(it); return;
     }
     if (acc === "textoIA") { await textoIA(it); return; }
+    if (b.dataset.quitarDoc != null) { it.vur_docs.splice(Number(b.dataset.quitarDoc), 1); PF.guardar(); pintarDocs(art, it); return; }
+    if (b.dataset.usarFoto != null && it.visita) {
+      const f = it.visita.fotos[Number(b.dataset.usarFoto)];
+      it.imagenes[b.dataset.slot] = { url: f.url, w: f.w, h: f.h };
+      PF.guardar(); refrescar(it); PF.aviso(`Foto puesta como ${b.dataset.slot === "fachada" ? "fachada" : b.dataset.slot === "interior1" ? "interior 1" : "interior 2"}.`, "ok", 2500); return;
+    }
     const q = b.dataset.slotQuitar;
     if (q) {
       if (q === "aerea") { it.mapa = ""; it.mapa_origen = ""; } else it.imagenes[q] = null;

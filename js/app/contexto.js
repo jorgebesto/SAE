@@ -1,6 +1,6 @@
 /* Texto de contextualización de cada predio y conclusiones generales.
-   1) Plantilla: arma frases con los datos (base, VUR, catastro).
-   2) "Mejorar con IA": Groq redacta de nuevo los mismos hechos, sin recibir el nombre ni el documento del propietario. */
+   1) Plantilla: arma frases con los datos (base, VUR leído por el agente, catastro e informe de visita).
+   2) "Redactar con IA": el agente (js/app/lector.js) redacta las secciones con todos los datos del folio. */
 (function (g) {
   const IP = (g.IP = g.IP || {});
   const U = IP.util;
@@ -10,10 +10,16 @@
     ["ubicacion", "Ubicación"],
     ["fisica", "Descripción física"],
     ["juridica", "Situación jurídica"],
+    ["analisis_anotacion", "Análisis de la última anotación"],
     ["catastral", "Situación catastral"],
     ["administrativa", "Situación administrativa"],
     ["concepto", "Concepto"],
+    ["resumen_anotacion", "Anotación más reciente (nota del resumen)"],
+    ["conclusiones", "Conclusiones del folio (una por renglón)"],
+    ["fuentes", "Fuentes (una por renglón)"],
   ];
+  // Secciones que van como párrafos del cuerpo del predio
+  C.PARRAFOS = ["ubicacion", "fisica", "juridica", "analisis_anotacion", "catastral", "administrativa"];
 
   /* ---------------- Ayudas de redacción ---------------- */
   const MIN = new Set(["DE", "DEL", "LA", "LAS", "LOS", "EL", "Y", "EN"]);
@@ -84,7 +90,36 @@
       confirmacion: it.confirmacion ? { veredicto: it.confirmacion.veredicto, texto: it.confirmacion.titulo } : null,
       diferencia_area: areaFila && areaFila.vur && areaFila.catastro ? { vur: areaFila.vur, catastro: areaFila.catastro, estado: areaFila.estado, nota: areaFila.nota } : null,
       tiene_mapa: Boolean(it.mapa),
+      visita: it.visita && it.visita.datos ? { fecha: it.visita.datos.fecha, estado: it.visita.datos.estado_ocupacion, recomendaciones: it.visita.datos.recomendaciones } : null,
+      registral: it.registral ? { alertas: (it.registral.alertas || []).length, tramites: (it.registral.tramites_en_curso || []).length, ultima: it.registral.ultima_anotacion } : null,
     };
+  };
+
+  /* ---------------- Ayudas con el VUR y la visita ---------------- */
+  const nada = (x) => !U.limpiar(x) || /^(0|-|—|n\/?a|no registra|ninguna?)$/i.test(U.limpiar(x));
+  C.titularTexto = function (reg) {
+    if (!reg) return "";
+    if (U.limpiar(reg._titular)) return U.limpiar(reg._titular);
+    return (reg.propietarios || []).map((p) => [U.limpiar(p.nombre), U.limpiar(p.documento) ? `${U.limpiar(p.tipo_documento) || "documento"} ${p.documento}` : "", U.limpiar(p.participacion)].filter(Boolean).join(", ")).join("; ");
+  };
+  C.textoAnotacion = function (a) {
+    if (!a) return "";
+    return `n.º ${a.numero} del ${a.fecha}${U.limpiar(a.especificacion) ? ", " + U.limpiar(a.especificacion).replace(/^\d{3,4}\s+/, "").replace(/^./, (x) => x.toLowerCase()) : ""}${U.limpiar(a.documento) ? ` (${U.limpiar(a.documento)})` : ""}`;
+  };
+  const tieneLista = (xs) => (xs || []).some((x) => U.limpiar(typeof x === "string" ? x : Object.values(x || {}).join(" ")));
+  C.listaVisita = (xs) => (xs || []).map((x) => U.limpiar(typeof x === "string" ? x : Object.values(x || {}).join(" "))).filter(Boolean);
+  C.dependencias = function (xs) {
+    const grupos = {};
+    for (const d of xs || []) { if (!U.limpiar(d.dependencia)) continue; const k = U.limpiar(d.estado).toLowerCase() || "sin calificar"; (grupos[k] = grupos[k] || []).push(U.limpiar(d.dependencia).toLowerCase()); }
+    return Object.entries(grupos).map(([e, ds]) => `${lista(ds).replace(/^./, (x) => x.toUpperCase())}: ${e}`).join("; ") +
+      ((xs || []).map((d) => U.limpiar(d.observaciones)).filter(Boolean).length ? ". " + xs.map((d) => U.limpiar(d.observaciones)).filter(Boolean).join(". ") : "");
+  };
+  C.vias = (xs) => (xs || []).filter((v) => U.limpiar(v.nombre)).map((v) => `${v.nombre}: ${[v.clase, v.caracteristicas, v.estado && "en " + String(v.estado).toLowerCase() + " estado"].filter((x) => U.limpiar(x)).map((x) => String(x).toLowerCase()).join(", ")}`).join("; ");
+  C.avaluoM2 = function (it) {
+    const av = U.numeroColombiano(String((it.campos || {}).avaluo_catastral || "").replace(/[$\s]/g, ""));
+    const reg = it.registral || {};
+    const area = Number(reg.area_terreno_m2) || (it.vur && it.vur.area_terreno_m2) || null;
+    return av && area ? av / area : null;
   };
 
   /* ---------------- Plantilla ---------------- */
@@ -101,6 +136,12 @@
     if (h.vur && U.limpiar(h.vur.direccion) && U.normalizarDireccion(h.vur.direccion) !== U.normalizarDireccion(h.direccion)) s += ` En el VUR figura como “${h.vur.direccion}”.`;
     if (h.catastro && h.catastro.fuente_poligono) s += ` Su ubicación se verificó con el polígono publicado por ${h.catastro.fuente_poligono}${h.catastro.numero_predial ? ", número predial " + h.catastro.numero_predial : ""}.`;
     else s += ` No se encontró el polígono del predio en los geoportales consultados; su ubicación se ilustra con la vista aérea aportada.`;
+    const vi = it.visita && it.visita.datos, reg = it.registral;
+    if (vi) {
+      const sect = C.listaVisita(vi.sector);
+      if (sect.length) s += ` Según la visita de inspección, el sector es ${lista(sect.map((x) => x.toLowerCase()))}.`;
+      if (U.limpiar(vi.ruta_llegada)) s += ` Ruta de llegada: ${U.limpiar(vi.ruta_llegada).replace(/\.?$/, ".")}`;
+    }
     T.ubicacion = s;
 
     // Descripción física
@@ -115,7 +156,18 @@
     if (h.vur && h.vur.cabida) s += ` La cabida registrada en el folio es de ${h.vur.cabida}.`;
     if (h.estado_fisico) s += ` Su estado físico se reporta como ${minus(h.estado_fisico)}.`;
     if (h.estrato && !/RURAL|^0$/i.test(h.estrato)) s += ` Se ubica en estrato ${minus(h.estrato)}.`;
-    if (h.observaciones_visita) s += ` En la visita se observó: ${h.observaciones_visita.replace(/\.?$/, ".")}`;
+    if (reg && reg.area_terreno_m2) s += ` El folio registra un área de terreno de ${U.formatoArea(Number(reg.area_terreno_m2))}${nada(reg.linderos_tecnicamente_definidos) ? "" : `; linderos técnicamente definidos: ${String(reg.linderos_tecnicamente_definidos).toLowerCase()}`}.`;
+    if (vi) {
+      const d = [];
+      if (U.limpiar(vi.clase_inmueble)) d.push(`clase de inmueble ${vi.clase_inmueble.toLowerCase()}`);
+      if (U.limpiar(vi.uso_actual)) d.push(`uso actual ${vi.uso_actual.toLowerCase()}`);
+      if (U.limpiar(vi.estrato)) d.push(`estrato ${vi.estrato.toLowerCase()}`);
+      if (d.length) s += ` En la visita del ${fechaLarga(vi.fecha) || "inmueble"} se registró ${lista(d)}.`;
+      if (U.limpiar(vi.observaciones_inmueble)) s += ` ${U.limpiar(vi.observaciones_inmueble).replace(/\.?$/, ".")}`;
+      const dep = C.dependencias(vi.estado_dependencias);
+      if (dep) s += ` Estado de las dependencias: ${dep.replace(/^./, (x) => x.toLowerCase()).replace(/\.?$/, ".")}`;
+    }
+    if (h.observaciones_visita) s += ` Observaciones del analista: ${h.observaciones_visita.replace(/\.?$/, ".")}`;
     T.fisica = s;
 
     // Situación jurídica
@@ -138,7 +190,16 @@
       if (v.salvedades) s += ` Presenta ${v.salvedades} salvedad${v.salvedades > 1 ? "es" : ""} en el folio.`;
       if (v.derivadas) s += ` Tiene matrículas derivadas (${v.derivadas}).`;
     } else s += " No se ha consultado el VUR de este folio.";
+    if (reg) {
+      const tit = C.titularTexto(reg);
+      if (tit && !(h.vur && h.vur.propietarios.length)) s += ` El titular inscrito es ${tit}.`;
+      if (tieneLista(reg.alertas)) s += ` El VUR registra las siguientes alertas: ${C.listaVisita(reg.alertas).join("; ")}.`;
+      if (reg.anotaciones && reg.anotaciones.length) s += ` El folio tiene ${reg.anotaciones.length} anotaciones leídas; la más reciente es la ${C.textoAnotacion(reg.ultima_anotacion)}.`;
+    }
     T.juridica = s;
+    const ult = reg && reg.ultima_anotacion;
+    T.analisis_anotacion = ult ? `Análisis de la anotación ${ult.numero}${U.limpiar(ult.especificacion) ? ` (${U.limpiar(ult.especificacion).replace(/^\d{3,4}\s+/, "").toLowerCase()})` : ""}. El ${ult.fecha} se inscribió en el folio ${U.limpiar(ult.documento) || "un acto"}${U.limpiar(ult.radicacion) ? `, con radicación ${ult.radicacion}` : ""}${U.limpiar(ult.personas) ? `; intervienen ${U.limpiar(ult.personas)}` : ""}. Debe revisarse el documento inscrito para establecer sus efectos sobre la disponibilidad del inmueble.` : "";
+    T.resumen_anotacion = ult ? C.textoAnotacion(ult).replace(/^./, (x) => x.toUpperCase()) + "." : "";
 
     // Situación catastral
     if (h.catastro) {
@@ -149,6 +210,9 @@
       else if (h.diferencia_area) s += ` El área de terreno del VUR coincide con la catastral.`;
     } else s = "No se ha consultado el catastro para este folio.";
     if (h.cedula_base && !/E\+/i.test(h.cedula_base)) s += ` La cédula catastral registrada en la base es ${h.cedula_base}.`;
+    if (reg && U.limpiar(reg.referencia_catastral)) s += ` La referencia catastral inscrita en el folio es ${reg.referencia_catastral}${U.limpiar(reg.referencia_catastral_anterior) ? ` (anterior ${reg.referencia_catastral_anterior})` : ""}.`;
+    const m2 = C.avaluoM2(it);
+    if (m2) s += ` El avalúo catastral equivale a unos $ ${U.formatoNumero(Math.round(m2), 0)} por m² de terreno.`;
     T.catastral = s.trim();
 
     // Situación administrativa
@@ -160,10 +224,40 @@
     else s += " No registra avalúo catastral en la base";
     s += h.avaluo_comercial && !/^\$ 0$/.test(h.avaluo_comercial) ? ` y un avalúo comercial de ${h.avaluo_comercial}.` : " y no tiene avalúo comercial.";
     if (h.estado_comercial) s += ` Su estado comercial es “${minus(h.estado_comercial)}”.`;
+    if (vi) {
+      s += ` En la visita del ${fechaLarga(vi.fecha) || "inmueble"}${U.limpiar(vi.objeto) ? ` (${vi.objeto.toLowerCase()})` : ""} el inmueble se encontró ${minus(vi.estado_ocupacion) || "sin estado informado"}`;
+      s += U.limpiar(vi.ingreso_predio) ? `${/^s/i.test(vi.ingreso_predio) ? " y se pudo" : " y no se pudo"} ingresar al predio.` : ".";
+      if (U.limpiar(vi.observaciones_visita)) s += ` ${U.limpiar(vi.observaciones_visita).replace(/\.?$/, ".")}`;
+      const rec = C.listaVisita(vi.recomendaciones);
+      if (rec.length) s += ` La visita recomendó: ${lista(rec.map((x) => x.toLowerCase()))}.`;
+      s += " El detalle de la visita se presenta en el anexo.";
+    }
     T.administrativa = s;
 
     T.concepto = C.conceptoPlantilla(it, h, port);
+    // Conclusiones del folio
+    const cc = [];
+    cc.push(`El folio ${h.fmi}, en ${mun} (${dep}), corresponde a ${articulo(h.clasificacion)} ${clas}${h.rural ? " rural" : " urbano"}${U.limpiar(h.area_terreno) && !/^0/.test(h.area_terreno) ? " de " + h.area_terreno : ""}.`);
+    if (h.vur) cc.push(`Según el VUR, el folio está ${minus(h.vur.estado_folio) || "sin estado informado"}${h.registral && !h.registral.alertas && !h.registral.tramites ? ", sin alertas ni trámites en curso" : ""}.`);
+    if (h.confirmacion) cc.push(`Cotejo de la matrícula con la cédula catastral: ${h.confirmacion.texto.charAt(0).toLowerCase() + h.confirmacion.texto.slice(1)}.`);
+    if (T.resumen_anotacion) cc.push(`Anotación más reciente: ${T.resumen_anotacion.charAt(0).toLowerCase() + T.resumen_anotacion.slice(1)}`);
+    for (const f of C.verificaciones(h)) cc.push(f.charAt(0).toUpperCase() + f.slice(1) + ".");
+    T.conclusiones = cc.join("\n");
+    T.fuentes = C.fuentesTexto(it, port).join("\n");
     return T;
+  };
+
+  C.fuentesTexto = function (it, port) {
+    const f = [], bi = (port && port.base_info) || {}, reg = it.registral, v = it.vur;
+    f.push(`Base de inmuebles de la SAE${bi.generado ? ` (corte ${bi.generado.slice(0, 10)})` : ""}.`);
+    if (reg) {
+      const c = reg.consulta || {};
+      f.push(`Superintendencia de Notariado y Registro, VUR: ${(reg.documentos_leidos || []).join(", ").toLowerCase() || "consulta"} de la matrícula ${it.fmi_texto || it.fmi}${c.numero ? `, consulta n.º ${c.numero}` : ""}${c.fecha ? ` del ${c.fecha}` : ""}${c.hora ? `, ${c.hora}` : ""}.`);
+      if (reg.ultima_anotacion) f.push(`Anotación n.º ${reg.ultima_anotacion.numero} del folio ${it.fmi_texto || it.fmi}${reg.ultima_anotacion.radicacion ? ` (radicación ${reg.ultima_anotacion.radicacion})` : ""}.`);
+    } else if (v) f.push(`Superintendencia de Notariado y Registro, VUR: datos básicos de la matrícula ${it.fmi_texto || it.fmi}${v.no_consulta ? `, consulta n.º ${v.no_consulta}` : ""}${v.fecha_consulta ? ` del ${v.fecha_consulta}` : ""}.`);
+    if (it.catastro && it.catastro.mapa_fuente) f.push(`${it.catastro.mapa_fuente}: polígono y datos catastrales del predio.`);
+    if (it.visita && it.visita.datos) f.push(`Informe de visita de inspección a inmuebles FO-DA-003 V04${it.visita.datos.fecha ? `, visita del ${it.visita.datos.fecha}` : ""}.`);
+    return f.map((x) => x.replace(/\.\.$/, "."));
   };
 
   C.verificaciones = function (h) {
@@ -181,7 +275,9 @@
     else if (h.confirmacion && h.confirmacion.veredicto !== "confirmado") f.push("confirmar la correspondencia entre la matrícula y la cédula catastral con el gestor catastral");
     else if (!h.confirmacion) f.push("consultar el catastro para confirmar la matrícula con la cédula catastral");
     if (h.diferencia_area && h.diferencia_area.estado === "diferente") f.push("aclarar la diferencia de áreas entre el registro y el catastro");
-    if (/ocupad|arrendad|invadid/i.test(h.ocupacion) && !/desocup/i.test(h.ocupacion)) f.push(`el inmueble está ${minus(h.ocupacion)}, lo que condiciona su entrega material`);
+    const ocup = (h.visita && U.limpiar(h.visita.estado)) || h.ocupacion;
+    if (/ocupad|arrendad|invadid/i.test(ocup) && !/desocup/i.test(ocup)) f.push(`el inmueble está ${minus(ocup)}${h.visita ? " según la visita" : ""}, lo que condiciona su entrega material`);
+    if (h.registral && h.registral.alertas) f.push("revisar las alertas registradas en el VUR");
     if (/PROCESO/i.test(h.estado_legal)) f.push("el activo no tiene aún extinción de dominio declarada, por lo que su destinación sería provisional");
     if (!h.tiene_mapa) f.push("obtener la vista aérea o el polígono del predio");
     return f;
@@ -222,42 +318,15 @@
     return par.join("\n\n");
   };
 
-  /* ---------------- Con IA ---------------- */
-  // Quita nombres y documentos de propietarios y los reemplaza por marcadores que luego se devuelven
-  function anonimizar(h) {
-    const mapa = [];
-    const copia = JSON.parse(JSON.stringify(h));
-    if (copia.vur) copia.vur.propietarios = copia.vur.propietarios.map((p, i) => {
-      const n = `[PROPIETARIO_${i + 1}]`, d = `[DOCUMENTO_${i + 1}]`;
-      mapa.push([n, p.nombre], [d, p.documento]);
-      return { ...p, nombre: n, documento: p.documento ? d : "" };
-    });
-    return { copia, mapa };
-  }
-  const devolver = (texto, mapa) => mapa.reduce((t, [m, v]) => t.split(m).join(v || ""), String(texto || ""));
-
+  /* ---------------- Con IA (se envían todos los datos del folio) ---------------- */
   C.mejorarConIA = async function (it, port) {
-    const h = C.hechos(it);
-    const { copia, mapa } = anonimizar(h);
-    let borrador = it.texto && it.texto.secciones ? it.texto.secciones : C.plantilla(it, port);
-    for (const [m, v] of mapa) if (v) for (const k of Object.keys(borrador)) borrador = { ...borrador, [k]: String(borrador[k]).split(v).join(m) };
-    const sistema = `Eres un profesional de la Sociedad de Activos Especiales (SAE, Colombia) que redacta informes técnicos internos sobre inmuebles para portafolios de destinación.
-Redacta en español formal de Colombia, en tercera persona, con frases claras y sin adornos. No inventes datos: usa SOLO los hechos entregados. Conserva exactamente cifras, fechas, números de folio, números prediales y los marcadores entre corchetes como [PROPIETARIO_1] o [DOCUMENTO_1].
-Responde SOLO con un objeto JSON con las claves: "ubicacion", "fisica", "juridica", "catastral", "administrativa", "concepto". Cada valor es un párrafo de 2 a 5 frases.
-En "concepto" da una opinión técnica prudente sobre si el predio sirve para la solicitud y qué se debe verificar antes de asignarlo; no afirmes que es viable si hay verificaciones pendientes.`;
-    const usuario = `Solicitud: ${U.limpiar(port && port.solicitud) || "(no indicada)"}
-Solicitante: ${U.limpiar(port && port.solicitante) || "(no indicado)"} ${U.limpiar(port && port.tipo)}
-
-Hechos del predio (JSON):
-${JSON.stringify(copia)}
-
-Verificaciones pendientes detectadas: ${JSON.stringify(C.verificaciones(h))}
-
-Borrador actual (mejóralo sin perder información):
-${JSON.stringify(borrador)}`;
-    const r = await IP.agente.chat(sistema, usuario, { temperatura: 0.2 });
+    const base = C.plantilla(it, port);
+    const r = await IP.lector.redactar(it, port);
     const out = {};
-    for (const [k] of C.SECCIONES) out[k] = devolver(U.limpiar(r[k]) || borrador[k], mapa);
+    for (const [k] of C.SECCIONES) {
+      const v = Array.isArray(r[k]) ? r[k].join("\n") : r[k];
+      out[k] = U.limpiar(v) ? String(v).trim() : base[k];
+    }
     return out;
   };
 
@@ -266,10 +335,13 @@ ${JSON.stringify(borrador)}`;
       const h = C.hechos(it);
       return { folio: h.fmi, municipio: h.municipio, departamento: h.departamento, clasificacion: h.clasificacion, area_terreno: h.area_terreno,
         ocupacion: h.ocupacion, estado_legal: h.estado_legal, folio_vur: h.vur ? h.vur.estado_folio : "sin consulta",
-        confirmacion_fmi: h.confirmacion ? h.confirmacion.texto : "sin consultar", verificaciones: C.verificaciones(h) };
+        confirmacion_fmi: h.confirmacion ? h.confirmacion.texto : "sin consultar", verificaciones: C.verificaciones(h),
+        titular: C.titularTexto(it.registral), ultima_anotacion: it.registral ? C.textoAnotacion(it.registral.ultima_anotacion) : "",
+        visita: it.visita && it.visita.datos ? { fecha: it.visita.datos.fecha, estado: it.visita.datos.estado_ocupacion, recomendaciones: it.visita.datos.recomendaciones } : null,
+        concepto: ((it.texto && it.texto.secciones) || {}).concepto || "", conclusiones_folio: ((it.texto && it.texto.secciones) || {}).conclusiones || "" };
     });
     const sistema = `Eres un profesional de la SAE (Colombia) que redacta las conclusiones de un informe técnico interno de un portafolio de inmuebles.
-Español formal, tercera persona, sin inventar datos. Conserva cifras y números de folio. Responde SOLO con JSON: {"conclusiones": "texto en 2 a 4 párrafos separados por \\n\\n"}.
+Español formal, tercera persona, sin inventar datos. Conserva cifras y números de folio. Responde SOLO con JSON: {"conclusiones": "4 a 8 frases cortas separadas por \\n\\n; cada una será una viñeta"}.
 Incluye: el resultado de la búsqueda, qué folios son más adecuados para la solicitud y por qué, y qué verificaciones quedan pendientes.`;
     const usuario = `Solicitud: ${U.limpiar(port.solicitud) || "(no indicada)"}
 Solicitante: ${U.limpiar(port.solicitante) || "(no indicado)"}

@@ -168,6 +168,11 @@
       <section class="tarjeta">
         <h2 class="tit">Descargar</h2>
         <div id="pendDocs" class="pend-docs"></div>
+        <fieldset class="modo-informe" id="modoInforme">
+          <legend>Informe</legend>
+          <label class="chk"><input type="radio" name="modoInforme" value="juntos" checked> Un informe con todos los folios</label>
+          <label class="chk"><input type="radio" name="modoInforme" value="separados"> Un informe por folio</label>
+        </fieldset>
         <div class="fila columna">
           <button type="button" id="genPptx" class="primario">Presentación (PowerPoint)</button>
           <button type="button" id="genDocx" class="secundario">Informe (Word)</button>
@@ -180,6 +185,7 @@
       <div class="previa-tabs">
         <button type="button" data-previa="informe" class="activa">Vista previa del informe</button>
         <button type="button" data-previa="presentacion">Vista previa de la presentación</button>
+        <select id="previaFolio" hidden aria-label="Folio de la vista previa"></select>
         <button type="button" id="actualizarPrevia" class="enlace">Actualizar</button>
       </div>
       <div id="previaInforme" class="previa-informe"><div class="vacio">Agregue folios al portafolio para ver el informe.</div></div>
@@ -190,7 +196,7 @@
 
 <footer class="pie">
   La base se publica cifrada y solo se abre en el navegador con la contraseña. El VUR, los mapas y las fotos se guardan solo en este navegador.
-  A Groq se envían los nombres de las columnas y la solicitud; al pedir “Mejorar con IA”, también los datos del predio sin el nombre ni el documento del propietario.
+  A Groq se envían los nombres de las columnas y la solicitud; al leer el VUR o el informe de visita y al redactar con IA, también el texto completo de esos documentos y los datos del predio.
   Imagen satelital y mapas: Esri.
 </footer>
 
@@ -254,10 +260,17 @@
           <div class="campos-ficha"></div>
         </section>
         <section class="bloque">
-          <h3 class="sub">Consulta del VUR (Datos Básicos)</h3>
-          <textarea class="vur" rows="5" placeholder="Pegue aquí la consulta Datos Básicos de este folio (Ctrl+A, Ctrl+C en el VUR)"></textarea>
-          <div class="fila"><button type="button" class="secundario mini" data-acc="leerVur">Leer VUR y buscar polígono</button></div>
+          <h3 class="sub">VUR</h3>
+          <textarea class="vur" rows="4" placeholder="Pegue aquí la consulta del VUR (Datos básicos, certificado o anotaciones), o suba el PDF"></textarea>
+          <div class="fila">
+            <label class="boton secundario mini">Subir PDF del VUR<input type="file" accept=".pdf,application/pdf" multiple data-acc="vurPdf" class="archivo-oculto"></label>
+            <button type="button" class="primario mini" data-acc="leerVur">Leer con el agente</button>
+          </div>
+          <ul class="docs-lista"></ul>
           <div class="vur-res"></div>
+          <h3 class="sub">Informe de visita (FO-DA-003)</h3>
+          <div class="fila"><label class="boton secundario mini">Subir informe de visita (PDF)<input type="file" accept=".pdf,application/pdf" data-acc="visitaPdf" class="archivo-oculto"></label></div>
+          <div class="visita-res"></div>
           <h3 class="sub">Ubicación en el catastro</h3>
           <div class="fila"><button type="button" class="secundario mini" data-acc="poligono">Buscar polígono</button></div>
           <div class="cat-res"></div>
@@ -276,7 +289,7 @@
           <h3 class="sub">Contextualización del predio (va en el informe)</h3>
           <div class="fila">
             <button type="button" class="secundario mini" data-acc="textoPlantilla">Generar con plantilla</button>
-            <button type="button" class="secundario mini" data-acc="textoIA">✦ Mejorar con IA</button>
+            <button type="button" class="secundario mini" data-acc="textoIA">✦ Redactar con IA</button>
             <span class="estado-texto nota"></span>
           </div>
         </div>
@@ -303,6 +316,8 @@
 <script src="js/app/base.js"></script>
 <script src="js/app/filtros.js"></script>
 <script src="js/app/agente.js"></script>
+<script src="js/app/pdf.js"></script>
+<script src="js/app/lector.js"></script>
 <script src="js/app/imagenes.js"></script>
 <script src="js/app/mapa.js"></script>
 <script src="js/app/contexto.js"></script>

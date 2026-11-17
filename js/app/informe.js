@@ -18,7 +18,6 @@
     const h2 = (t, salto) => new D.Paragraph({ heading: D.HeadingLevel.HEADING_2, pageBreakBefore: Boolean(salto), children: [run(t, { bold: true, size: 26, color: AZUL })] });
     const etiqueta = (t) => new D.Paragraph({ spacing: { before: 220, after: 80 }, keepNext: true, children: [run(t.toUpperCase(), { bold: true, size: 16, color: GRIS, characterSpacing: 30 })] });
     const vineta = (hijos) => new D.Paragraph({ bullet: { level: 0 }, spacing: { after: 60, line: 290 }, children: hijos });
-    const leyenda = (t) => new D.Paragraph({ alignment: AL.CENTER, spacing: { before: 40, after: 160 }, children: [run(t, { italics: true, size: 16, color: GRIS })] });
     const linea = (color, size = 4) => ({ style: D.BorderStyle.SINGLE, size, color });
     const nada = { style: D.BorderStyle.NONE, size: 0, color: "FFFFFF" };
     const sinBordes = { top: nada, bottom: nada, left: nada, right: nada, insideHorizontal: nada, insideVertical: nada };
@@ -33,25 +32,23 @@
     });
     const tabla = (filas, anchos, bordes) => new D.Table({ width: { size: anchos.reduce((a, b) => a + b, 0), type: D.WidthType.DXA }, columnWidths: anchos, borders: bordes, rows: filas });
 
-    // Ficha a cuatro columnas (etiqueta, valor, etiqueta, valor)
-    function fichaCuatro(pares) {
-      const filas = [];
-      for (let i = 0; i < pares.length; i += 2) {
-        const [a, b] = [pares[i], pares[i + 1] || ["", ""]];
-        filas.push(new D.TableRow({ cantSplit: true, children: [
-          celda(run(a[0], { bold: true, size: 17, color: AZUL }), { fondo: CLARO, ancho: 2050 }), celda(valorRun(a[1], { size: 19 }), { ancho: 2870 }),
-          celda(run(b[0], { bold: true, size: 17, color: AZUL }), { fondo: CLARO, ancho: 2050 }), celda(valorRun(b[1], { size: 19 }), { ancho: 2870 }),
-        ] }));
-      }
-      return tabla(filas, [2050, 2870, 2050, 2870], todos);
+    // Ficha a cuatro columnas (etiqueta, valor, etiqueta, valor); las filas de dos celdas ocupan todo el ancho
+    const ET = 2050, VA = 2870;
+    function ficha(filas) {
+      return tabla(filas.map((f) => new D.TableRow({ cantSplit: true, children: f.length > 2 ? [
+        celda(run(f[0], { bold: true, size: 17, color: AZUL }), { fondo: CLARO, ancho: ET }), celda(valorRun(f[1], { size: 18 }), { ancho: VA }),
+        celda(run(f[2], { bold: true, size: 17, color: AZUL }), { fondo: CLARO, ancho: ET }), celda(valorRun(f[3], { size: 18 }), { ancho: VA }),
+      ] : [
+        celda(run(f[0], { bold: true, size: 17, color: AZUL }), { fondo: CLARO, ancho: ET }), celda(valorRun(f[1], { size: 18 }), { ancho: VA * 2 + ET, span: 3 }),
+      ] })), [ET, VA, ET, VA], todos);
     }
-    const fichaDos = (pares) => tabla(pares.map(([k, v]) => new D.TableRow({ cantSplit: true, children: [
-      celda(run(k, { bold: true, size: 17, color: AZUL }), { fondo: CLARO, ancho: 3000 }), celda(valorRun(v || "Sin dato", { size: 19 }), { ancho: 6840 })] })), [3000, 6840], todos);
-    function tablaCab(cab, filas, anchos) {
+    const TONO = { Coincide: "1B7A3A", "No coincide": "B3261E", Revisar: "A86B00" };
+    function tablaCab(b) {
+      const fondo = b.ligera ? CLARO : AZUL, colorCab = b.ligera ? AZUL : "FFFFFF";
       return tabla([
-        new D.TableRow({ tableHeader: true, children: cab.map((c, i) => celda(run(c, { bold: true, size: 17, color: "FFFFFF" }), { fondo: AZUL, ancho: anchos[i] })) }),
-        ...filas.map((f) => new D.TableRow({ cantSplit: true, children: f.map((c, i) => celda(valorRun(c, { size: 18 }), { ancho: anchos[i] })) })),
-      ], anchos, horizontales);
+        new D.TableRow({ tableHeader: true, children: b.cab.map((c, i) => celda(run(c, { bold: true, size: 16, color: colorCab }), { fondo, ancho: b.anchos[i] })) }),
+        ...b.filas.map((f) => new D.TableRow({ cantSplit: true, children: f.map((c, i) => celda(valorRun(c, i === b.tono && TONO[c] ? { size: 17, bold: true, color: TONO[c] } : { size: 17 }), { ancho: b.anchos[i] })) })),
+      ], b.anchos, horizontales);
     }
     async function imagen(url, ancho, alto, recorte, extra = {}) {
       const src = recorte ? await I.recortar(url, ancho / alto, 1400) : url;
@@ -59,20 +56,17 @@
       const f = recorte ? ancho / m.w : Math.min(ancho / m.w, alto / m.h);
       return new D.ImageRun({ type: I.tipo(src), data: I.bytes(src), transformation: { width: Math.round(m.w * f), height: Math.round(m.h * f) }, ...extra });
     }
-    async function rejillaFotos(fotos, pref) {
+    async function rejillaFotos(fotos, natural) {
       const filas = [];
       for (let i = 0; i < fotos.length; i += 2) {
         const celdas = [];
-        for (const [k, f] of fotos.slice(i, i + 2).entries()) celdas.push(celda([
-          new D.Paragraph({ alignment: AL.CENTER, children: [await imagen(f.url, 300, 225, true)] }),
-          new D.Paragraph({ alignment: AL.CENTER, spacing: { before: 60, after: 160 }, children: [run(`Foto ${pref}.${i + k + 1}. `, { bold: true, size: 16, color: GRIS }), run(f.pie.replace(/\.$/, ""), { italics: true, size: 16, color: GRIS })] }),
-        ], { ancho: 4920, mv: 40 }));
+        for (const u of fotos.slice(i, i + 2)) celdas.push(celda([new D.Paragraph({ alignment: AL.CENTER, children: [natural ? await imagen(u, 315, 158, true) : await imagen(u, 315, 210, true)] })], { ancho: 4920, mv: 50 }));
         if (celdas.length === 1) celdas.push(celda([new D.Paragraph("")], { ancho: 4920 }));
         filas.push(new D.TableRow({ cantSplit: true, children: celdas }));
       }
       return tabla(filas, [4920, 4920], sinBordes);
     }
-    const enlace = (texto, url) => vineta(url ? [new D.ExternalHyperlink({ link: url, children: [run(texto, { color: "0563C1", underline: {} })] })] : [run(texto)]);
+    const pieFig = (t) => new D.Paragraph({ spacing: { before: 60, after: 200 }, children: [run(t, { size: 16, color: GRIS })] });
 
     /* ---------- Portada (fondo azul a toda la página) ---------- */
     const fondoImg = new D.ImageRun({ type: "png", data: I.bytes(await I.plantilla("fondo-portada.png")), transformation: { width: 816, height: 1056 },
@@ -95,62 +89,35 @@
 
     /* ---------- Cuerpo ---------- */
     const h = [];
-    h.push(h1("1. Objeto y alcance"));
-    M.objeto.forEach((p) => h.push(par(p)));
-    h.push(par(M.metodo));
-    const blanco = linea("FFFFFF", 12);
-    h.push(tabla([new D.TableRow({ children: M.cifras.map(([n, t]) => celda([
-      new D.Paragraph({ alignment: AL.CENTER, children: [run(n, { bold: true, size: 34, color: AZUL })] }),
-      new D.Paragraph({ alignment: AL.CENTER, children: [run(t, { size: 16, color: GRIS })] })], { fondo: CLARO, ancho: Math.floor(9840 / M.cifras.length), mv: 100 })) })],
-    M.cifras.map(() => Math.floor(9840 / M.cifras.length)), { top: blanco, bottom: blanco, left: blanco, right: blanco, insideHorizontal: blanco, insideVertical: blanco }));
-
-    if (M.criterios.length) {
-      h.push(h1("2. Criterios de búsqueda"));
-      h.push(par("Se aplicaron los siguientes filtros sobre la base de inmuebles:"));
-      for (const c of M.criterios) {
-        const i = c.indexOf(": ");
-        h.push(vineta(i > 0 ? [run(c.slice(0, i + 2)), run(c.slice(i + 2), { italics: true })] : [run(c)]));
+    let primero = true;
+    for (const b of M.bloques) {
+      switch (b.t) {
+        case "h1": h.push(h1(b.texto, b.salto && !primero)); break;
+        case "h2": h.push(h2(b.texto, b.salto)); break;
+        case "sub": h.push(new D.Paragraph({ spacing: { after: 160 }, keepNext: true, children: [run(b.fuerte, { bold: true, color: AZUL }), ...b.resto.map((x) => run(` · ${x}`, { color: GRIS }))] })); break;
+        case "etiqueta": h.push(etiqueta(b.texto)); break;
+        case "p": h.push(new D.Paragraph({ spacing: { after: 120, line: 300 }, children: [...(b.lead ? [run(b.lead + " ", { bold: true })] : []), run(b.texto)] })); break;
+        case "nota": h.push(new D.Paragraph({ spacing: { before: 60, after: 160 }, children: [run(b.texto, { size: 17, color: GRIS })] })); break;
+        case "ficha": h.push(ficha(b.filas)); break;
+        case "tabla": h.push(tablaCab(b)); break;
+        case "figura":
+          h.push(new D.Paragraph({ alignment: AL.CENTER, spacing: { before: 120, after: 0 }, keepNext: true, children: [await imagen(b.url, 600, 340, false)] }));
+          h.push(pieFig(b.pie)); break;
+        case "fotos": h.push(await rejillaFotos(b.fotos, b.natural)); h.push(pieFig(b.pie)); break;
+        case "concepto":
+          b.parrafos.forEach((x, i) => h.push(new D.Paragraph({ spacing: { after: i === b.parrafos.length - 1 ? 200 : 0, line: 300 }, shading: { type: D.ShadingType.CLEAR, fill: CLARO, color: "auto" },
+            border: { left: { style: D.BorderStyle.SINGLE, size: 24, color: AZUL, space: 8 } }, indent: { left: 160, right: 120 },
+            children: [...(i ? [run("", { break: 1 })] : []), run(x)] })));
+          break;
+        case "fuentes": b.items.forEach((x) => h.push(new D.Paragraph({ indent: { left: 360 }, spacing: { after: 60, line: 280 }, children: [run(x, { size: 19 })] }))); break;
+        case "vinetas": b.items.forEach((x) => h.push(vineta([run(x)]))); break;
       }
+      primero = false;
     }
-    const nRes = M.criterios.length ? 3 : 2, nPre = nRes + 1, nCon = nRes + 2;
-    h.push(h1(`${nRes}. Resumen de los folios`));
-    h.push(tablaCab(M.resumenCab, M.resumen, [500, 1200, 2400, 1300, 1500, 1400, 1540]));
-    if (M.mapaGeneral) {
-      h.push(new D.Paragraph({ alignment: AL.CENTER, spacing: { before: 240 }, children: [await imagen(M.mapaGeneral, 640, 410)] }));
-      h.push(leyenda(`Ubicación general de los folios (el número corresponde al de la tabla).${M.mapaNota ? " " + M.mapaNota : ""}`));
-    }
-
-    h.push(h1(`${nPre}. Descripción de los predios`, true));
-    for (const p of M.predios) {
-      const pref = `${nPre}.${p.n}`;
-      h.push(h2(`${pref}. Folio ${p.fmi}`, p.n > 1));
-      h.push(new D.Paragraph({ spacing: { after: 160 }, keepNext: true, children: [run(p.lugar, { bold: true, color: AZUL }),
-        ...p.subtitulo.map((x) => run(`   ·   ${x}`, { color: GRIS })), ...(p.sello ? [run(`   ·   FMI vs. cédula: ${p.sello}`, { color: GRIS })] : [])] }));
-      if (p.hero) {
-        h.push(new D.Paragraph({ alignment: AL.CENTER, spacing: { after: 0 }, keepNext: true, children: [await imagen(p.hero, 560, 271, true)] }));
-        h.push(leyenda((p.fotos.find((f) => f.url === p.hero) || {}).pie || ""));
-      }
-      h.push(etiqueta("Ficha del predio"));
-      h.push(fichaCuatro(p.datos));
-      for (const [t, texto] of p.secciones) { if (!texto) continue; h.push(etiqueta(t)); h.push(par(texto)); }
-      if (p.concepto) {
-        h.push(etiqueta("Concepto"));
-        h.push(new D.Paragraph({ spacing: { after: 160, line: 300 }, shading: { type: D.ShadingType.CLEAR, fill: CLARO, color: "auto" },
-          border: { left: { style: D.BorderStyle.SINGLE, size: 24, color: AZUL, space: 8 } }, indent: { left: 160, right: 120 }, children: [run(p.concepto)] }));
-      }
-      if (p.observaciones) { h.push(etiqueta("Observaciones de la visita")); h.push(par(p.observaciones)); }
-      if (p.vur) { h.push(etiqueta("Consulta del VUR")); h.push(fichaDos(p.vur)); }
-      if (p.contraste.length) { h.push(etiqueta("Contraste base / VUR / catastro")); h.push(tablaCab(["Campo", "Base", "VUR", "Catastro", "Resultado"], p.contraste, [1900, 1950, 1950, 1950, 2090])); }
-      if (p.fotos.length) { h.push(etiqueta("Registro fotográfico")); h.push(await rejillaFotos(p.fotos, pref)); }
-      if (p.fuentes.length) { h.push(etiqueta("Fuentes")); p.fuentes.forEach((f) => h.push(enlace(f.texto, f.url))); }
-    }
-
-    h.push(h1(`${nCon}. Conclusiones y recomendaciones`, true));
-    M.conclusiones.forEach((c) => h.push(vineta([run(c)])));
 
     const encabezado = new D.Header({ children: [new D.Paragraph({ border: { bottom: { style: D.BorderStyle.SINGLE, size: 6, color: "D0D6DE", space: 4 } },
       tabStops: [{ type: D.TabStopType.RIGHT, position: 9840 }],
-      children: [await imagen(await I.plantilla("logo-sae.png"), 62, 31), run("\tInforme técnico de folios para portafolio", { size: 15, color: GRIS })] })] });
+      children: [run("SAE · Sociedad de Activos Especiales", { size: 16, bold: true, color: AZUL }), run("\tInforme técnico de folios para portafolio", { size: 15, color: GRIS })] })] });
     const pie = new D.Footer({ children: [new D.Paragraph({ border: { top: { style: D.BorderStyle.SINGLE, size: 6, color: "D0D6DE", space: 4 } },
       tabStops: [{ type: D.TabStopType.RIGHT, position: 9840 }],
       children: [run("Sociedad de Activos Especiales · Uso interno", { size: 15, color: GRIS }), run("\tPágina ", { size: 15, color: GRIS }),
